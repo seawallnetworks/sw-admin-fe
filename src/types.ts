@@ -17,11 +17,6 @@ export interface AclRule {
 
 export type AclRuleInput = Omit<AclRule, 'id' | 'hits'>
 
-export interface Page<T> {
-  items: T[]
-  total: number
-}
-
 export interface BlockedEvent {
   time: string
   srcIp: string

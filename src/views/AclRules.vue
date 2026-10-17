@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import {
   NButton, NCard, NDataTable, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NRadioButton,
   NRadioGroup, NSelect, NSpace, NSwitch, NTag, useMessage, type DataTableColumns, type FormInst, type FormRules,
@@ -13,14 +13,25 @@ const message = useMessage()
 
 // ---------- list ----------
 
+// The backend returns the whole rule set in one call (rule counts are small);
+// searching, filtering and paging all happen here in the browser.
+
 const keyword = ref('')
 const action = ref<AclAction | null>(null)
-const rows = ref<AclRule[]>([])
+const allRules = ref<AclRule[]>([])
 const loading = ref(false)
+
+const rows = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  return allRules.value
+    .filter((r) => !action.value || r.action === action.value)
+    .filter((r) => !kw || r.name.toLowerCase().includes(kw) || r.source.includes(kw))
+    .sort((a, b) => a.priority - b.priority)
+})
+
 const pagination = reactive({
   page: 1,
   pageSize: 10,
-  itemCount: 0,
   showSizePicker: true,
   pageSizes: [10, 20, 50],
   prefix: ({ itemCount }: { itemCount: number | undefined }) => `共 ${itemCount ?? 0} 条`,
@@ -29,14 +40,7 @@ const pagination = reactive({
 async function load() {
   loading.value = true
   try {
-    const res = await listAclRules({
-      keyword: keyword.value.trim() || undefined,
-      action: action.value ?? undefined,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-    })
-    rows.value = res.items
-    pagination.itemCount = res.total
+    allRules.value = await listAclRules()
   } catch {
     // error already shown by api.ts
   } finally {
@@ -44,27 +48,22 @@ async function load() {
   }
 }
 
-let searchTimer: number | undefined
-watch(keyword, () => {
-  window.clearTimeout(searchTimer)
-  searchTimer = window.setTimeout(() => {
-    pagination.page = 1
-    load()
-  }, 300)
-})
-watch(action, () => {
+// A new search or filter starts again from the first page.
+watch([keyword, action], () => {
   pagination.page = 1
-  load()
+})
+// After a delete the last page may be gone; step back to the last one that exists.
+watch(rows, (list) => {
+  const lastPage = Math.max(1, Math.ceil(list.length / pagination.pageSize))
+  if (pagination.page > lastPage) pagination.page = lastPage
 })
 
 function onPageChange(page: number) {
   pagination.page = page
-  load()
 }
 function onPageSizeChange(size: number) {
   pagination.pageSize = size
   pagination.page = 1
-  load()
 }
 
 onMounted(load)
@@ -212,7 +211,6 @@ const columns: DataTableColumns<AclRule> = [
     </NSpace>
 
     <NDataTable
-      remote
       :columns="columns"
       :data="rows"
       :loading="loading"

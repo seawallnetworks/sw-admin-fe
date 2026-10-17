@@ -65,16 +65,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       })),
     } satisfies DashboardData
   }],
-  ['GET', /^\/acl\/rules$/, (_, { query = {} }) => {
-    const keyword = String(query.keyword ?? '').toLowerCase()
-    const page = Number(query.page ?? 1)
-    const pageSize = Number(query.pageSize ?? 10)
-    const items = mock.rules
-      .filter((r) => !query.action || r.action === query.action)
-      .filter((r) => !keyword || r.name.toLowerCase().includes(keyword) || r.source.includes(keyword))
-      .sort((a, b) => a.priority - b.priority)
-    return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length }
-  }],
+  ['GET', /^\/acl\/rules$/, () => [...mock.rules].sort((a, b) => a.priority - b.priority)],
   ['POST', /^\/acl\/rules$/, (_, { body }) => {
     const rule: AclRule = { ...(body as AclRuleInput), id: mock.nextId++, hits: 0 }
     mock.rules.push(rule)

@@ -37,7 +37,7 @@ src/
 | --- | --- | --- |
 | POST | /api/auth/login | `{username, password}` → `{token}` |
 | GET | /api/dashboard | 统计卡片、流量趋势、最近拦截事件 |
-| GET | /api/acl/rules | `?keyword&action&page&pageSize` → `{items, total}` |
+| GET | /api/acl/rules | 返回全部规则数组（按优先级排序）；搜索、筛选、分页由前端完成 |
 | POST | /api/acl/rules | 新增规则 |
 | PUT | /api/acl/rules/:id | 更新规则（可部分字段） |
 | DELETE | /api/acl/rules/:id | 删除规则 |

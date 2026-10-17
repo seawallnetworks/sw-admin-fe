@@ -3,7 +3,7 @@ import { createDiscreteApi } from 'naive-ui'
 import { router } from './router'
 import { clearSession, getToken, setSession } from './auth'
 import { ApiError } from './types'
-import type { AclAction, AclRule, AclRuleInput, DashboardData, Page, RequestOptions } from './types'
+import type { AclRule, AclRuleInput, DashboardData, RequestOptions } from './types'
 
 export * from './types'
 export { getToken, getUsername } from './auth'
@@ -81,8 +81,8 @@ export async function login(username: string, password: string) {
 
 export const fetchDashboard = () => get<DashboardData>('/dashboard')
 
-export const listAclRules = (q: { keyword?: string; action?: AclAction; page: number; pageSize: number }) =>
-  get<Page<AclRule>>('/acl/rules', q)
+/** All rules in one call; the ACL page filters and pages them in the browser. */
+export const listAclRules = () => get<AclRule[]>('/acl/rules')
 export const createAclRule = (rule: AclRuleInput) => post<AclRule>('/acl/rules', rule)
 export const updateAclRule = (id: number, patch: Partial<AclRuleInput>) => put<AclRule>(`/acl/rules/${id}`, patch)
 export const deleteAclRule = (id: number) => del<void>(`/acl/rules/${id}`)
