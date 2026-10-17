@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getToken } from './api'
+import { getToken } from './auth'
 
 const placeholder = () => import('./views/Placeholder.vue')
 

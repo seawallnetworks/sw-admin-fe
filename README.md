@@ -12,8 +12,10 @@ npm run build    # 类型检查 + 生产构建，输出到 dist/
 
 ## Mock 数据
 
-`src/api.ts` 顶部的 `USE_MOCK` 开关控制是否使用内置 mock 数据（默认开启，登录账号 `admin / admin`）。
-改为 `false` 即请求真实后端。
+由环境变量 `VITE_USE_MOCK` 控制。`.env.development` 里默认为 `true`，`npm run dev` 使用内置 mock（登录账号 `admin / admin`）。
+
+- 本地联调真实后端：新建 `.env.development.local`（已被 git 忽略），写入 `VITE_USE_MOCK=false`。
+- 生产构建（`npm run build`）不读取 `.env.development`，mock 关闭，`src/mock.ts` 不会被打包。
 
 ## 结构
 
@@ -22,7 +24,10 @@ src/
   main.ts          入口
   App.vue          全局 Provider + 布局（侧边栏 / 顶栏 / 内容区）
   router.ts        路由与登录守卫
-  api.ts           fetch 封装、接口定义、mock 后端
+  auth.ts          登录态（token / 用户名）存取
+  types.ts         接口类型定义
+  api.ts           fetch 封装与接口函数
+  mock.ts          mock 后端（仅开发模式按需加载）
   views/           Login / Dashboard / AclRules / Placeholder
 ```
 
