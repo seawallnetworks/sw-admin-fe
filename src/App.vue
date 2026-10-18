@@ -1,28 +1,33 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, ref, watch, type Component } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
-  NButton, NConfigProvider, NDialogProvider, NDropdown, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
+  NButton, NConfigProvider, NDialogProvider, NDropdown, NIcon, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
   NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type MenuOption,
 } from 'naive-ui'
 import HelpDrawer from './components/HelpDrawer.vue'
+import {
+  AclIcon, BrandIcon, BruteForceIcon, CcIcon, DashboardIcon, DdosIcon, HttpFloodIcon, LogsIcon,
+} from './icons'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
 
 const route = useRoute()
 const isPublic = computed(() => route.meta.public)
 
-const menuItems: [string, string][] = [
-  ['/dashboard', 'Dashboard'],
-  ['/acl', 'ACL Rules'],
-  ['/ddos', 'DDoS Protection'],
-  ['/http-flood', 'HTTP Flood'],
-  ['/cc', 'CC Protection'],
-  ['/brute-force', 'Brute-Force Protection'],
-  ['/logs', 'Logs'],
+const menuItems: [string, string, Component][] = [
+  ['/dashboard', 'Dashboard', DashboardIcon],
+  ['/acl', 'ACL Rules', AclIcon],
+  ['/ddos', 'DDoS Protection', DdosIcon],
+  ['/http-flood', 'HTTP Flood', HttpFloodIcon],
+  ['/cc', 'CC Protection', CcIcon],
+  ['/brute-force', 'Brute-Force Protection', BruteForceIcon],
+  ['/logs', 'Logs', LogsIcon],
 ]
-const menuOptions: MenuOption[] = menuItems.map(([path, label]) => ({
+// The icon is what's left when the sidebar is collapsed; hovering it shows the label.
+const menuOptions: MenuOption[] = menuItems.map(([path, label, icon]) => ({
   key: path,
   label: () => h(RouterLink, { to: path }, () => label),
+  icon: () => h(NIcon, null, { default: () => h(icon) }),
 }))
 
 const collapsed = ref(false)
@@ -73,7 +78,10 @@ function onUserSelect(key: string) {
             @collapse="collapsed = true"
             @expand="collapsed = false"
           >
-            <div class="brand">{{ collapsed ? 'SW' : 'Seawall Console' }}</div>
+            <div class="brand">
+              <NIcon :size="24" color="#18a058"><BrandIcon /></NIcon>
+              <span v-if="!collapsed">Seawall Console</span>
+            </div>
             <NMenu
               :options="menuOptions"
               :value="route.path"
@@ -119,6 +127,7 @@ function onUserSelect(key: string) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 16px;
   white-space: nowrap;
