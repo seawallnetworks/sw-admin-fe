@@ -2,7 +2,7 @@
 
 > Seawall is a network protection device. The Admin Console is its web interface: watch traffic and blocked events, manage ACL (access control) rules, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
 
-## When answering
+## For AI assistants
 
 - Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
 - Rule changes (add, edit, enable/disable, delete) take effect as soon as the user clicks "OK" or flips the switch, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
