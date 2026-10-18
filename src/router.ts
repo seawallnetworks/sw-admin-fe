@@ -25,6 +25,20 @@ router.beforeEach((to) => {
   }
 })
 
+// A page's code is loaded when it is first opened. After a deploy, a tab opened before it asks for
+// the old build's file, which is gone: load the page afresh, with the new build. Once a minute at
+// most, so an error that a reload doesn't fix can't reload the page over and over.
+const RELOADED_KEY = 'sw_reloaded_at'
+router.onError((_error, to) => {
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(RELOADED_KEY)) < 60_000) return
+    sessionStorage.setItem(RELOADED_KEY, String(Date.now()))
+  } catch {
+    return
+  }
+  location.assign(to.fullPath)
+})
+
 router.afterEach((to) => {
   document.title = `${to.meta.title ?? ''} - Seawall Admin Console`
 })
