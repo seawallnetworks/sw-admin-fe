@@ -13,11 +13,10 @@ npm run build    # type check + production build, output in dist/
 ## Deploy
 
 ```bash
-tools/deploy.sh              # build and install on this machine
-tools/deploy.sh user@host    # build here, install on another machine over ssh (rsync)
+tools/deploy.sh    # build and install on this machine
 ```
 
-It builds, refuses a build that contains the mock, copies `dist/` into `/usr/local/seawall/share/sw_admin` (where sw_admin's nginx serves it; sudo if that isn't writable), and then checks that `https://<host>:8443/` serves the new `index.html`. nginx doesn't need a restart. `SW_URL` overrides the URL it checks, for a host known to ssh only by an alias.
+It builds, refuses a build that contains the mock, copies `dist/` into `/usr/local/seawall/share/sw_admin` (where sw_admin's nginx serves it; sudo if that isn't writable), and then checks that `https://localhost:8443/` serves the new `index.html`. nginx doesn't need a restart.
 
 New assets go in before the new `index.html`, and the old ones are removed last. A tab opened before the deploy that then opens a page whose code is gone reloads once, with the new build.
 
@@ -32,7 +31,7 @@ Controlled by the environment variable `VITE_USE_MOCK`. `.env.development` sets 
 
 ```
 tools/
-  deploy.sh        build and install on a device
+  deploy.sh        build and install on this machine
 public/
   llms.txt         user manual for AI assistants, served at /llms.txt
 src/
