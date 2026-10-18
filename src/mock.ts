@@ -12,7 +12,8 @@ const MOCK_TTL = 900
 const mock = {
   /** The mock's login time is per page load, so a reload restarts the 15 minutes. */
   loginAt: Date.now(),
-  pending: 0,
+  /** Whether a change was made since the last save; the real backend compares running and startup. */
+  dirty: false,
   nextId: 1,
   rules: [] as AclRule[],
 }
@@ -88,7 +89,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     const rule: AclRule = { ...(body as AclRuleInput), id: mock.nextId++, hits: 0 }
     if (portless(rule.protocol)) rule.port = null
     mock.rules.push(rule)
-    mock.pending++
+    mock.dirty = true
     return rule
   }],
   ['PUT', /^\/acl\/rules\/(\d+)$/, (m, { body }) => {
@@ -96,16 +97,17 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     if (!rule) throw new ApiError(404, 'invalid', '规则不存在')
     Object.assign(rule, body)
     if (portless(rule.protocol)) rule.port = null
-    mock.pending++
+    mock.dirty = true
     return rule
   }],
   ['DELETE', /^\/acl\/rules\/(\d+)$/, (m) => {
     mock.rules = mock.rules.filter((r) => r.id !== Number(m[1]))
-    mock.pending++
+    mock.dirty = true
   }],
-  ['GET', /^\/config\/pending$/, () => ({ count: mock.pending })],
+  ['GET', /^\/config\/pending$/, () => ({ dirty: mock.dirty })],
   ['POST', /^\/config\/save$/, () => {
-    mock.pending = 0
+    mock.dirty = false
+    return {}
   }],
 ]
 

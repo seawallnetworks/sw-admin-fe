@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { createDiscreteApi } from 'naive-ui'
 import { router } from './router'
-import { clearSession, getSession, getToken, setSession, type Session } from './auth'
+import { clearSession, getRole, getSession, getToken, setSession, type Session } from './auth'
 import { ApiError } from './types'
 import type { AclRule, AclRuleInput, DashboardData, RequestOptions, Role } from './types'
 
@@ -71,8 +71,8 @@ export function logout() {
   endSession()
 }
 
-/** Number of config changes not yet persisted with "Save Config". */
-export const pendingChanges = ref(0)
+/** Whether the configuration in effect differs from the saved one ("Save Config" saves it). */
+export const unsavedChanges = ref(false)
 
 // ---------- request core ----------
 
@@ -170,10 +170,15 @@ export const createAclRule = (rule: AclRuleInput) => post<AclRule>('/acl/rules',
 export const updateAclRule = (id: number, patch: Partial<AclRuleInput>) => put<AclRule>(`/acl/rules/${id}`, patch)
 export const deleteAclRule = (id: number) => del<void>(`/acl/rules/${id}`)
 
+/** Asks whether there are unsaved changes. Admin only: for a `user` there is nothing to save. */
 export async function refreshPendingChanges() {
-  pendingChanges.value = (await get<{ count: number }>('/config/pending')).count
+  if (getRole() !== 'admin') {
+    unsavedChanges.value = false
+    return
+  }
+  unsavedChanges.value = (await get<{ dirty: boolean }>('/config/pending')).dirty
 }
 export async function saveConfig() {
-  await post<void>('/config/save')
-  pendingChanges.value = 0
+  await post<object>('/config/save')
+  unsavedChanges.value = false
 }

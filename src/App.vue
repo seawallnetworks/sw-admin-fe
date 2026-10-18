@@ -5,7 +5,7 @@ import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
   NMenu, NMessageProvider, NSpace, NTag, dateZhCN, zhCN, type MenuOption,
 } from 'naive-ui'
-import { getToken, getUsername, logout, pendingChanges, refreshPendingChanges, saveConfig } from './api'
+import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
 
 const route = useRoute()
 const isPublic = computed(() => route.meta.public)
@@ -26,6 +26,7 @@ const menuOptions: MenuOption[] = menuItems.map(([path, label]) => ({
 
 const collapsed = ref(false)
 const username = ref(getUsername())
+const isAdmin = ref(getRole() === 'admin')
 
 // Refresh header state whenever we land on an authenticated page (e.g. right after login).
 watch(
@@ -33,6 +34,7 @@ watch(
   () => {
     if (isPublic.value || !getToken()) return
     username.value = getUsername()
+    isAdmin.value = getRole() === 'admin'
     refreshPendingChanges().catch(() => {})
   },
   { immediate: true },
@@ -82,8 +84,8 @@ function onUserSelect(key: string) {
             <NLayoutHeader bordered class="header">
               <span class="title">{{ route.meta.title }}</span>
               <NSpace align="center">
-                <NTag v-if="pendingChanges > 0" type="warning" round>{{ pendingChanges }} 项未保存的更改</NTag>
-                <NButton type="primary" :disabled="pendingChanges === 0" :loading="saving" @click="onSave">
+                <NTag v-if="isAdmin && unsavedChanges" type="warning" round>有未保存的更改</NTag>
+                <NButton v-if="isAdmin" type="primary" :disabled="!unsavedChanges" :loading="saving" @click="onSave">
                   保存配置
                 </NButton>
                 <NDropdown :options="userOptions" trigger="click" @select="onUserSelect">
