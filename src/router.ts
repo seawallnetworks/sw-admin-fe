@@ -6,7 +6,7 @@ const placeholder = () => import('./views/Placeholder.vue')
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', component: () => import('./views/Login.vue'), meta: { title: 'Log In', public: true, help: ['Logging in and out'] } },
+    { path: '/login', component: () => import('./views/Login.vue'), meta: { title: 'Log In', public: true } },
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: 'Dashboard', help: ['Dashboard'] } },
     { path: '/acl', component: () => import('./views/AclRules.vue'), meta: { title: 'ACL Rules', help: ['ACL Rules', 'Saving the configuration', 'Common questions'] } },

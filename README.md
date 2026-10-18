@@ -16,7 +16,7 @@ npm run build    # type check + production build, output in dist/
 tools/deploy.sh    # build and install on this machine
 ```
 
-It builds, refuses a build that contains the mock, copies `dist/` into `/usr/local/seawall/share/sw_admin` (where sw_admin's nginx serves it; sudo if that isn't writable), and then checks that `https://localhost:8443/` serves the new `index.html`. nginx doesn't need a restart.
+It builds, refuses a build that contains the mock, copies `dist/` into `/usr/local/seawall/share/sw_admin` (where sw_admin's nginx serves it; sudo if that isn't writable), and then checks that `https://localhost:8443/` serves the new `index.html` and that `/llms.txt` refuses a request without a login. nginx doesn't need a restart.
 
 New assets go in before the new `index.html`, and the old ones are removed last. A tab opened before the deploy that then opens a page whose code is gone reloads once, with the new build.
 
@@ -33,7 +33,7 @@ Controlled by the environment variable `VITE_USE_MOCK`. `.env.development` sets 
 tools/
   deploy.sh        build and install on this machine
 public/
-  llms.txt         user manual for AI assistants, served at /llms.txt
+  llms.txt         user manual for AI assistants, served at /llms.txt to logged-in users
 src/
   main.ts          entry point
   App.vue          global providers + layout (sidebar / header / content)
@@ -51,7 +51,7 @@ src/
 
 `public/llms.txt` is a plain-text user manual that AI assistants (such as Gemini in Chrome) can read to answer "how do I use this feature" questions. It describes the console as a user sees it, with no implementation details. When a feature or a label in the UI changes, update it there too.
 
-The console's Help button shows the same file, a few sections at a time: each route's `meta.help` in `src/router.ts` names the `## ` headings to show. AI assistants in the browser read the page, not `/llms.txt`, so the panel is what puts the manual in front of them. Keep those headings in step with `meta.help` when renaming one.
+nginx gives `/llms.txt` to logged-in users only (see `conf/nginx.conf` in lua-resty-sw-admin), so the console fetches it with the session's token, and a plain link to it gets a 401. The console's Help button shows the same file, a few sections at a time, or all of it with "Full manual": each route's `meta.help` in `src/router.ts` names the `## ` headings to show. AI assistants in the browser read the page, not `/llms.txt`, so the panel is what puts the manual in front of them. Keep those headings in step with `meta.help` when renaming one.
 
 ## API contract (all under /api)
 

@@ -24,7 +24,7 @@
 
 - Menu on the left: Dashboard, ACL Rules, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
 - Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only), the "Help" button and the user name menu.
-- "Help" opens a panel with the help for the current page, and a link to this whole manual. The login page has a "Help" link too.
+- "Help" opens a panel with the help for the current page. "Full manual" at the bottom of the panel shows this whole manual, and "This page" goes back.
 
 ## Roles
 

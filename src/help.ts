@@ -1,5 +1,9 @@
 // The help drawer's text: sections of public/llms.txt, the user manual written for AI assistants.
 // One file for both, so the help a person reads and the help an assistant reads can't drift apart.
+//
+// nginx gives the manual to logged-in users only, so it is fetched with the token, as an API call.
+
+import { getToken } from './auth'
 
 export type Block =
   | { kind: 'heading'; text: string }
@@ -16,7 +20,7 @@ let manual: Promise<Section[]> | null = null
 
 /** Fetches and parses the manual, once; a failed fetch is tried again on the next call. */
 export function loadManual(): Promise<Section[]> {
-  manual ??= fetch('/llms.txt')
+  manual ??= fetch('/llms.txt', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } })
     .then((res) => {
       if (!res.ok) throw new Error(`manual: ${res.status}`)
       return res.text()

@@ -2,7 +2,6 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NCard, NForm, NFormItem, NInput, type FormInst, type FormRules } from 'naive-ui'
-import HelpDrawer from '../components/HelpDrawer.vue'
 import { ApiError, USE_MOCK, login } from '../api'
 
 const router = useRouter()
@@ -81,7 +80,6 @@ async function onSubmit() {
         <NAlert v-if="error" type="error" :show-icon="true" class="error">{{ error }}</NAlert>
         <NButton type="primary" block attr-type="submit" :loading="loading">Log In</NButton>
         <p v-if="USE_MOCK" class="hint">Mock mode: admin / admin</p>
-        <p class="hint"><HelpDrawer text /></p>
       </NForm>
     </NCard>
   </div>

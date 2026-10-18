@@ -4,8 +4,6 @@ import { useRoute } from 'vue-router'
 import { NAlert, NButton, NDrawer, NDrawerContent, NSpin } from 'naive-ui'
 import { inlineParts, loadManual, type Section } from '../help'
 
-defineProps<{ text?: boolean }>()
-
 /** Manual sections for a page whose route names none (the pages still to come). */
 const DEFAULT_SECTIONS = ['Layout', 'Roles', 'Saving the configuration']
 
@@ -14,15 +12,20 @@ const show = ref(false)
 const loading = ref(false)
 const failed = ref(false)
 const manual = ref<Section[]>([])
+/** The whole manual instead of this page's sections. */
+const full = ref(false)
 
 const sections = computed(() =>
-  (route.meta.help ?? DEFAULT_SECTIONS)
-    .map((title) => manual.value.find((s) => s.title === title))
-    .filter((s): s is Section => s !== undefined),
+  full.value
+    ? manual.value
+    : (route.meta.help ?? DEFAULT_SECTIONS)
+        .map((title) => manual.value.find((s) => s.title === title))
+        .filter((s): s is Section => s !== undefined),
 )
 
 async function open() {
   show.value = true
+  full.value = false
   if (manual.value.length) return
   loading.value = true
   failed.value = false
@@ -37,9 +40,9 @@ async function open() {
 </script>
 
 <template>
-  <NButton :text="text" :quaternary="!text" :size="text ? 'small' : 'medium'" @click="open">Help</NButton>
+  <NButton quaternary @click="open">Help</NButton>
   <NDrawer v-model:show="show" width="min(480px, 100vw)" placement="right">
-    <NDrawerContent :title="`Help: ${route.meta.title ?? ''}`" closable>
+    <NDrawerContent :title="full ? 'Help: Full Manual' : `Help: ${route.meta.title ?? ''}`" closable>
       <NSpin :show="loading">
         <NAlert v-if="failed" type="error" :show-icon="true">
           Help could not be loaded. Close this panel and try again.
@@ -67,7 +70,9 @@ async function open() {
       <template #footer>
         <div class="footer">
           <span>Tip: with this panel open, you can ask an AI assistant such as Gemini in Chrome about this page.</span>
-          <a href="/llms.txt" target="_blank" rel="noopener">Full manual</a>
+          <NButton text type="primary" size="small" @click="full = !full">
+            {{ full ? 'This page' : 'Full manual' }}
+          </NButton>
         </div>
       </template>
     </NDrawerContent>
@@ -121,7 +126,7 @@ code {
   font-size: 12px;
   color: #888;
 }
-.footer a {
+.footer .n-button {
   flex: none;
 }
 </style>

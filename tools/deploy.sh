@@ -41,13 +41,20 @@ copy --delete dist/assets/ "$ROOT/assets/"
 
 echo "== check $URL"
 # -k: the device's certificate is self-signed
-for path in / /llms.txt; do
-    code=$(curl -sk -o /dev/null -w '%{http_code}' "$URL$path")
-    if [ "$code" != 200 ]; then
-        echo "== $URL$path: HTTP $code" >&2
-        exit 1
-    fi
-done
+status() {
+    curl -sk -o /dev/null -w '%{http_code}' "$URL$1"
+}
+code=$(status /)
+if [ "$code" != 200 ]; then
+    echo "== $URL/: HTTP $code" >&2
+    exit 1
+fi
+# the manual is for logged-in users only (nginx.conf in lua-resty-sw-admin)
+code=$(status /llms.txt)
+if [ "$code" != 401 ]; then
+    echo "== $URL/llms.txt without a login: HTTP $code, not 401" >&2
+    exit 1
+fi
 if ! curl -sk "$URL/" | cmp -s - dist/index.html; then
     echo "== $URL/ is not the index.html just built" >&2
     exit 1
