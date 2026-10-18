@@ -9,7 +9,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { ComposeOption } from 'echarts/core'
 import type { LineSeriesOption } from 'echarts/charts'
 import type { GridComponentOption, LegendComponentOption, TooltipComponentOption } from 'echarts/components'
-import { fetchDashboard, type BlockedEvent, type DashboardData } from '../api'
+import { fetchDashboard, type BlockedEvent, type DashboardData, type EventType } from '../api'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
@@ -62,6 +62,17 @@ onUnmounted(() => {
 // ---------- view ----------
 
 const fmt = (n: number) => n.toLocaleString('zh-CN')
+/** Epoch seconds as the browser's local time of day. */
+const fmtTime = (t: number) => new Date(t * 1000).toLocaleTimeString('zh-CN', { hour12: false })
+
+const eventTypeLabels: Record<EventType, string> = {
+  acl_deny: 'ACL 拒绝',
+  syn_flood: 'SYN Flood',
+  http_flood: 'HTTP Flood',
+  cc: 'CC 攻击',
+  brute_force: '暴力破解',
+}
+const actionLabels: Record<BlockedEvent['action'], string> = { drop: '丢弃' }
 
 const chartOption = computed<
   ComposeOption<LineSeriesOption | GridComponentOption | LegendComponentOption | TooltipComponentOption>
@@ -71,21 +82,22 @@ const chartOption = computed<
     tooltip: { trigger: 'axis' },
     legend: { data: ['入站', '丢弃'], top: 0 },
     grid: { left: 60, right: 20, top: 36, bottom: 30 },
-    xAxis: { type: 'category', boundaryGap: false, data: t.map((p) => p.time) },
+    xAxis: { type: 'category', boundaryGap: false, data: t.map((p) => fmtTime(p.time)) },
     yAxis: { type: 'value', name: 'pps' },
     series: [
-      { name: '入站', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, data: t.map((p) => p.inbound) },
-      { name: '丢弃', type: 'line', smooth: true, showSymbol: false, color: '#d03050', data: t.map((p) => p.dropped) },
+      { name: '入站', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, data: t.map((p) => p.inbound_pps) },
+      { name: '丢弃', type: 'line', smooth: true, showSymbol: false, color: '#d03050', data: t.map((p) => p.dropped_pps) },
     ],
   }
 })
 
 const eventColumns: DataTableColumns<BlockedEvent> = [
-  { title: '时间', key: 'time', width: 100 },
-  { title: '源 IP', key: 'srcIp' },
-  { title: '类型', key: 'type' },
+  { title: '时间', key: 'time', width: 100, render: (e) => fmtTime(e.time) },
+  { title: '源 IP', key: 'src_ip' },
+  // a value this build doesn't know yet is shown as it came
+  { title: '类型', key: 'type', render: (e) => eventTypeLabels[e.type] ?? e.type },
   { title: '目标', key: 'target' },
-  { title: '处置', key: 'action', width: 80 },
+  { title: '处置', key: 'action', width: 80, render: (e) => actionLabels[e.action] ?? e.action },
 ]
 </script>
 
@@ -93,24 +105,24 @@ const eventColumns: DataTableColumns<BlockedEvent> = [
   <NGrid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" item-responsive>
     <NGi span="4 m:2 l:1">
       <NCard>
-        <NStatistic label="入站流量 (pps)" :value="data ? fmt(data.inboundPps) : '-'" />
+        <NStatistic label="入站流量 (pps)" :value="data ? fmt(data.inbound_pps) : '-'" />
       </NCard>
     </NGi>
     <NGi span="4 m:2 l:1">
       <NCard>
-        <NStatistic label="丢弃流量 (pps)" :value="data ? fmt(data.droppedPps) : '-'" />
+        <NStatistic label="丢弃流量 (pps)" :value="data ? fmt(data.dropped_pps) : '-'" />
       </NCard>
     </NGi>
     <NGi span="4 m:2 l:1">
       <NCard>
-        <NStatistic label="生效 ACL 规则" :value="data ? data.activeAclRules : '-'" />
+        <NStatistic label="生效 ACL 规则" :value="data ? data.active_acl_rules : '-'" />
       </NCard>
     </NGi>
     <NGi span="4 m:2 l:1">
       <NCard>
         <NStatistic label="SYN 防护">
-          <NTag v-if="data" :type="data.synProtection ? 'success' : 'default'" size="large">
-            {{ data.synProtection ? '已启用' : '未启用' }}
+          <NTag v-if="data" :type="data.syn_protection ? 'success' : 'default'" size="large">
+            {{ data.syn_protection ? '已启用' : '未启用' }}
           </NTag>
           <span v-else>-</span>
         </NStatistic>

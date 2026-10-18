@@ -91,17 +91,22 @@ async function onDelete(row: AclRule) {
 
 // ---------- add / edit dialog ----------
 
-const protocolOptions = (['TCP', 'UDP', 'ICMP', 'ANY'] as Protocol[]).map((p) => ({ label: p, value: p }))
+const protocolLabels: Record<Protocol, string> = { tcp: 'TCP', udp: 'UDP', icmp: 'ICMP', any: 'ANY' }
+const protocolOptions = (Object.keys(protocolLabels) as Protocol[]).map((p) => ({ label: protocolLabels[p], value: p }))
+const portless = (p: Protocol) => p === 'icmp' || p === 'any'
 const actionOptions = [
   { label: '允许', value: 'allow' },
   { label: '拒绝', value: 'deny' },
 ]
 
-const emptyForm = (): AclRuleInput => ({
+/** The dialog's fields: a rule, with the port as the input box's text ('' for any port). */
+type RuleForm = Omit<AclRuleInput, 'port'> & { port: string }
+
+const emptyForm = (): RuleForm => ({
   priority: 100,
   name: '',
   source: '',
-  protocol: 'TCP',
+  protocol: 'tcp',
   port: '',
   action: 'deny',
   enabled: true,
@@ -109,7 +114,7 @@ const emptyForm = (): AclRuleInput => ({
 
 const showEditor = ref(false)
 const editingId = ref<number | null>(null)
-const form = ref<AclRuleInput>(emptyForm())
+const form = ref<RuleForm>(emptyForm())
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 
@@ -122,7 +127,7 @@ const formRules: FormRules = {
 function openEditor(row?: AclRule) {
   editingId.value = row?.id ?? null
   form.value = row
-    ? { priority: row.priority, name: row.name, source: row.source, protocol: row.protocol, port: row.port, action: row.action, enabled: row.enabled }
+    ? { priority: row.priority, name: row.name, source: row.source, protocol: row.protocol, port: row.port ?? '', action: row.action, enabled: row.enabled }
     : emptyForm()
   showEditor.value = true
 }
@@ -133,8 +138,8 @@ async function onSubmit() {
   } catch {
     return
   }
-  const portless = form.value.protocol === 'ICMP' || form.value.protocol === 'ANY'
-  const data = { ...form.value, port: portless ? '*' : form.value.port.trim() || '*' }
+  const port = form.value.port.trim()
+  const data: AclRuleInput = { ...form.value, port: portless(form.value.protocol) || !port ? null : port }
   submitting.value = true
   try {
     if (editingId.value === null) {
@@ -157,7 +162,7 @@ const columns: DataTableColumns<AclRule> = [
   { title: '优先级', key: 'priority', width: 80 },
   { title: '名称', key: 'name', ellipsis: { tooltip: true } },
   { title: '源地址', key: 'source' },
-  { title: '协议/端口', key: 'protocol', render: (r) => `${r.protocol} / ${r.port}` },
+  { title: '协议/端口', key: 'protocol', render: (r) => protocolLabels[r.protocol] + (portless(r.protocol) ? '' : ` / ${r.port ?? '全部'}`) },
   {
     title: '动作',
     key: 'action',
@@ -250,7 +255,7 @@ const columns: DataTableColumns<AclRule> = [
         <NInput
           v-model:value="form.port"
           placeholder="例如 80、8000-8080，留空表示全部"
-          :disabled="form.protocol === 'ICMP' || form.protocol === 'ANY'"
+          :disabled="portless(form.protocol)"
         />
       </NFormItem>
       <NFormItem label="动作">

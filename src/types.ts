@@ -1,7 +1,10 @@
 // Shared API types. Kept free of imports so both api.ts and mock.ts can use them.
 
+// Field names and values as docs/api.md (in lua-resty-sw-admin) has them: snake_case names,
+// lowercase enum values, timestamps in Unix epoch seconds. Labels for display are the views' job.
+
 export type AclAction = 'allow' | 'deny'
-export type Protocol = 'TCP' | 'UDP' | 'ICMP' | 'ANY'
+export type Protocol = 'tcp' | 'udp' | 'icmp' | 'any'
 
 export interface AclRule {
   id: number
@@ -9,7 +12,8 @@ export interface AclRule {
   name: string
   source: string
   protocol: Protocol
-  port: string
+  /** "443" or "8000-8080"; null for any port, and always null for icmp and any. */
+  port: string | null
   action: AclAction
   hits: number
   enabled: boolean
@@ -17,20 +21,24 @@ export interface AclRule {
 
 export type AclRuleInput = Omit<AclRule, 'id' | 'hits'>
 
+export type EventType = 'acl_deny' | 'syn_flood' | 'http_flood' | 'cc' | 'brute_force'
+
 export interface BlockedEvent {
-  time: string
-  srcIp: string
-  type: string
+  time: number
+  src_ip: string
+  type: EventType
   target: string
-  action: string
+  action: 'drop'
 }
 
 export interface DashboardData {
-  inboundPps: number
-  droppedPps: number
-  activeAclRules: number
-  synProtection: boolean
-  traffic: { time: string; inbound: number; dropped: number }[]
+  inbound_pps: number
+  dropped_pps: number
+  active_acl_rules: number
+  syn_protection: boolean
+  /** Oldest first, one point every 5 seconds. */
+  traffic: { time: number; inbound_pps: number; dropped_pps: number }[]
+  /** Newest first, at most 10. */
   events: BlockedEvent[]
 }
 
