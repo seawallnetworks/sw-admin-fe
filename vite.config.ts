@@ -8,7 +8,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [vue()],
     // echarts lives in the lazily loaded Dashboard chunk (~540 kB, already tree-shaken)
-    build: { target: 'es2022', chunkSizeWarningLimit: 700 },
+    // assetsInlineLimit 0: no data: URIs, which the device's CSP refuses
+    build: { target: 'es2022', chunkSizeWarningLimit: 700, assetsInlineLimit: 0 },
     server: {
       proxy: {
         // secure: false for the device's self-signed certificate
