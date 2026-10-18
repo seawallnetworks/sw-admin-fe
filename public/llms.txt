@@ -23,7 +23,8 @@
 ## Layout
 
 - Menu on the left: Dashboard, ACL Rules, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
-- Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only) and the user name menu.
+- Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only), the "Help" button and the user name menu.
+- "Help" opens a panel with the help for the current page, and a link to this whole manual. The login page has a "Help" link too.
 
 ## Roles
 
@@ -54,6 +55,7 @@ ACL (access control list) rules allow or block traffic by source address, protoc
 ### Viewing and finding rules
 
 - Columns: Priority, Name, Source, Protocol / Port, Action (Allow / Deny), Hits, Enabled, Actions.
+- The note above the list is a reminder: rules are checked lowest priority number first, and changes need "Save Config" to be kept after a restart.
 - "Hits" counts the packets that matched the rule; use it to check that a rule is working.
 - The "Search name or source" box finds rules by name or source address.
 - The "All actions" drop-down shows only "Allow" or only "Deny" rules.

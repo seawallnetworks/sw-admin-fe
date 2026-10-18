@@ -3,8 +3,9 @@ import { computed, h, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
-  NMenu, NMessageProvider, NSpace, NTag, dateEnUS, enUS, type MenuOption,
+  NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type MenuOption,
 } from 'naive-ui'
+import HelpDrawer from './components/HelpDrawer.vue'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
 
 const route = useRoute()
@@ -84,10 +85,16 @@ function onUserSelect(key: string) {
             <NLayoutHeader bordered class="header">
               <span class="title">{{ route.meta.title }}</span>
               <NSpace align="center">
-                <NTag v-if="isAdmin && unsavedChanges" type="warning" round>Unsaved changes</NTag>
+                <NTooltip v-if="isAdmin && unsavedChanges">
+                  <template #trigger>
+                    <NTag type="warning" round>Unsaved changes</NTag>
+                  </template>
+                  Changes are in effect now, but a restart loses them until you click Save Config.
+                </NTooltip>
                 <NButton v-if="isAdmin" type="primary" :disabled="!unsavedChanges" :loading="saving" @click="onSave">
                   Save Config
                 </NButton>
+                <HelpDrawer />
                 <NDropdown :options="userOptions" trigger="click" @select="onUserSelect">
                   <NButton quaternary>{{ username || 'User' }} ▾</NButton>
                 </NDropdown>

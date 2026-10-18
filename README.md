@@ -29,13 +29,17 @@ src/
   auth.ts          login state (token / user name / role / expiry), kept in sessionStorage
   types.ts         API types
   api.ts           fetch wrapper and endpoint functions
+  help.ts          loads public/llms.txt and splits it into sections for the help drawer
   mock.ts          mock backend (loaded on demand, development only)
+  components/      HelpDrawer (the Help button and its panel)
   views/           Login / Dashboard / AclRules / Placeholder
 ```
 
 ## User manual for AI assistants
 
 `public/llms.txt` is a plain-text user manual that AI assistants (such as Gemini in Chrome) can read to answer "how do I use this feature" questions. It describes the console as a user sees it, with no implementation details. When a feature or a label in the UI changes, update it there too.
+
+The console's Help button shows the same file, a few sections at a time: each route's `meta.help` in `src/router.ts` names the `## ` headings to show. AI assistants in the browser read the page, not `/llms.txt`, so the panel is what puts the manual in front of them. Keep those headings in step with `meta.help` when renaming one.
 
 ## API contract (all under /api)
 

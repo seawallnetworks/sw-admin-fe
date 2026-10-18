@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import {
-  NButton, NCard, NDataTable, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NRadioButton,
+  NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NRadioButton,
   NRadioGroup, NSelect, NSpace, NSwitch, NTag, useMessage, type DataTableColumns, type FormInst, type FormRules,
 } from 'naive-ui'
 import {
-  createAclRule, deleteAclRule, listAclRules, refreshPendingChanges, updateAclRule,
+  createAclRule, deleteAclRule, getRole, listAclRules, refreshPendingChanges, updateAclRule,
   type AclAction, type AclRule, type AclRuleInput, type Protocol,
 } from '../api'
 
 const message = useMessage()
+const isAdmin = getRole() === 'admin'
 
 // ---------- list ----------
 
@@ -176,7 +177,7 @@ const columns: DataTableColumns<AclRule> = [
   {
     title: 'Enabled',
     key: 'enabled',
-    width: 70,
+    width: 90,
     render: (r) => h(NSwitch, { value: r.enabled, size: 'small', onUpdateValue: (v: boolean) => onToggle(r, v) }),
   },
   {
@@ -215,6 +216,12 @@ const columns: DataTableColumns<AclRule> = [
       <NButton type="primary" @click="openEditor()">Add Rule</NButton>
     </NSpace>
 
+    <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
+      Rules are checked in priority order, lowest number first. Changes take effect at once;
+      <template v-if="isAdmin">click Save Config to keep them after a restart.</template>
+      <template v-else>ask an administrator to save them so they are kept after a restart.</template>
+    </NAlert>
+
     <NDataTable
       :columns="columns"
       :data="rows"
@@ -238,12 +245,15 @@ const columns: DataTableColumns<AclRule> = [
         <NInput v-model:value="form.name" />
       </NFormItem>
       <NFormItem label="Priority" path="priority">
-        <NInputNumber
-          :value="form.priority"
-          :min="1" :max="65535"
-          style="width: 100%"
-          @update:value="(v) => (form.priority = v ?? 1)"
-        />
+        <div class="field">
+          <NInputNumber
+            :value="form.priority"
+            :min="1" :max="65535"
+            style="width: 100%"
+            @update:value="(v) => (form.priority = v ?? 1)"
+          />
+          <div class="field-hint">1 to 65535. Lower numbers are checked first.</div>
+        </div>
       </NFormItem>
       <NFormItem label="Source" path="source">
         <NInput v-model:value="form.source" placeholder="IP or CIDR, for example 192.168.1.0/24" />
@@ -276,3 +286,14 @@ const columns: DataTableColumns<AclRule> = [
     </template>
   </NModal>
 </template>
+
+<style scoped>
+.field {
+  width: 100%;
+}
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #888;
+}
+</style>
