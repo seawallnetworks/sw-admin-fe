@@ -3,7 +3,7 @@ import { computed, h, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
-  NMenu, NMessageProvider, NSpace, NTag, dateZhCN, zhCN, type MenuOption,
+  NMenu, NMessageProvider, NSpace, NTag, dateEnUS, enUS, type MenuOption,
 } from 'naive-ui'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
 
@@ -11,13 +11,13 @@ const route = useRoute()
 const isPublic = computed(() => route.meta.public)
 
 const menuItems: [string, string][] = [
-  ['/dashboard', '仪表盘'],
-  ['/acl', 'ACL 规则'],
-  ['/ddos', 'DDoS 防护'],
+  ['/dashboard', 'Dashboard'],
+  ['/acl', 'ACL Rules'],
+  ['/ddos', 'DDoS Protection'],
   ['/http-flood', 'HTTP Flood'],
-  ['/cc', 'CC 防护'],
-  ['/brute-force', '暴力破解防护'],
-  ['/logs', '日志'],
+  ['/cc', 'CC Protection'],
+  ['/brute-force', 'Brute-Force Protection'],
+  ['/logs', 'Logs'],
 ]
 const menuOptions: MenuOption[] = menuItems.map(([path, label]) => ({
   key: path,
@@ -50,14 +50,14 @@ async function onSave() {
   }
 }
 
-const userOptions = [{ key: 'logout', label: '退出登录' }]
+const userOptions = [{ key: 'logout', label: 'Log out' }]
 function onUserSelect(key: string) {
   if (key === 'logout') logout()
 }
 </script>
 
 <template>
-  <NConfigProvider :locale="zhCN" :date-locale="dateZhCN">
+  <NConfigProvider :locale="enUS" :date-locale="dateEnUS">
     <NMessageProvider>
       <NDialogProvider>
         <RouterView v-if="isPublic" />
@@ -72,7 +72,7 @@ function onUserSelect(key: string) {
             @collapse="collapsed = true"
             @expand="collapsed = false"
           >
-            <div class="brand">{{ collapsed ? 'SW' : 'Seawall 控制台' }}</div>
+            <div class="brand">{{ collapsed ? 'SW' : 'Seawall Console' }}</div>
             <NMenu
               :options="menuOptions"
               :value="route.path"
@@ -84,12 +84,12 @@ function onUserSelect(key: string) {
             <NLayoutHeader bordered class="header">
               <span class="title">{{ route.meta.title }}</span>
               <NSpace align="center">
-                <NTag v-if="isAdmin && unsavedChanges" type="warning" round>有未保存的更改</NTag>
+                <NTag v-if="isAdmin && unsavedChanges" type="warning" round>Unsaved changes</NTag>
                 <NButton v-if="isAdmin" type="primary" :disabled="!unsavedChanges" :loading="saving" @click="onSave">
-                  保存配置
+                  Save Config
                 </NButton>
                 <NDropdown :options="userOptions" trigger="click" @select="onUserSelect">
-                  <NButton quaternary>{{ username || '用户' }} ▾</NButton>
+                  <NButton quaternary>{{ username || 'User' }} ▾</NButton>
                 </NDropdown>
               </NSpace>
             </NLayoutHeader>

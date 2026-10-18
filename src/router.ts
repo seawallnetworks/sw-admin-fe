@@ -6,15 +6,15 @@ const placeholder = () => import('./views/Placeholder.vue')
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', component: () => import('./views/Login.vue'), meta: { title: '登录', public: true } },
+    { path: '/login', component: () => import('./views/Login.vue'), meta: { title: 'Log In', public: true } },
     { path: '/', redirect: '/dashboard' },
-    { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: '仪表盘' } },
-    { path: '/acl', component: () => import('./views/AclRules.vue'), meta: { title: 'ACL 规则' } },
-    { path: '/ddos', component: placeholder, meta: { title: 'DDoS 防护' } },
+    { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: 'Dashboard' } },
+    { path: '/acl', component: () => import('./views/AclRules.vue'), meta: { title: 'ACL Rules' } },
+    { path: '/ddos', component: placeholder, meta: { title: 'DDoS Protection' } },
     { path: '/http-flood', component: placeholder, meta: { title: 'HTTP Flood' } },
-    { path: '/cc', component: placeholder, meta: { title: 'CC 防护' } },
-    { path: '/brute-force', component: placeholder, meta: { title: '暴力破解防护' } },
-    { path: '/logs', component: placeholder, meta: { title: '日志' } },
+    { path: '/cc', component: placeholder, meta: { title: 'CC Protection' } },
+    { path: '/brute-force', component: placeholder, meta: { title: 'Brute-Force Protection' } },
+    { path: '/logs', component: placeholder, meta: { title: 'Logs' } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 })
@@ -26,7 +26,7 @@ router.beforeEach((to) => {
 })
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title ?? ''} - Seawall 管理控制台`
+  document.title = `${to.meta.title ?? ''} - Seawall Admin Console`
 })
 
 declare module 'vue-router' {

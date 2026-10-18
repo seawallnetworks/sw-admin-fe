@@ -7,6 +7,6 @@ const route = useRoute()
 
 <template>
   <NCard :title="route.meta.title">
-    <NEmpty description="功能开发中" style="padding: 60px 0" />
+    <NEmpty description="Coming soon" style="padding: 60px 0" />
   </NCard>
 </template>

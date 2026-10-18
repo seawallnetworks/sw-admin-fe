@@ -1,54 +1,60 @@
 # sw-admin-fe
 
-Seawall 管理控制台前端 — Vite + Vue 3 + TypeScript + Naive UI，图表使用 echarts / vue-echarts。
+Admin console front end for Seawall — Vite + Vue 3 + TypeScript + Naive UI, charts with echarts / vue-echarts.
 
-## 开发
+## Development
 
 ```bash
 npm install
-SW_DEVICE=https://<设备地址>:8443 npm run dev   # http://localhost:5173，/api 代理到该设备
-npm run build    # 类型检查 + 生产构建，输出到 dist/
+SW_DEVICE=https://<device>:8443 npm run dev   # http://localhost:5173, /api proxied to that device
+npm run build    # type check + production build, output in dist/
 ```
 
-## Mock 数据
+## Mock data
 
-由环境变量 `VITE_USE_MOCK` 控制。`.env.development` 里默认为 `true`，`npm run dev` 使用内置 mock（登录账号 `admin / admin`）。
+Controlled by the environment variable `VITE_USE_MOCK`. `.env.development` sets it to `true`, so `npm run dev` uses the built-in mock (log in as `admin / admin`).
 
-- 本地联调真实后端：新建 `.env.development.local`（已被 git 忽略），写入 `VITE_USE_MOCK=false`，以及 `SW_DEVICE=https://<设备地址>:8443`（也可在命令行上设置）。
-- 生产构建（`npm run build`）不读取 `.env.development`，mock 关闭，`src/mock.ts` 不会被打包。
+- To work against a real backend: create `.env.development.local` (ignored by git) with `VITE_USE_MOCK=false` and `SW_DEVICE=https://<device>:8443` (or set it on the command line).
+- The production build (`npm run build`) doesn't read `.env.development`: the mock is off and `src/mock.ts` is not bundled.
 
-## 结构
+## Layout
 
 ```
+public/
+  llms.txt         user manual for AI assistants, served at /llms.txt
 src/
-  main.ts          入口
-  App.vue          全局 Provider + 布局（侧边栏 / 顶栏 / 内容区）
-  router.ts        路由与登录守卫
-  auth.ts          登录态（token / 用户名 / 角色 / 过期时间）存取，存于 sessionStorage
-  types.ts         接口类型定义
-  api.ts           fetch 封装与接口函数
-  mock.ts          mock 后端（仅开发模式按需加载）
+  main.ts          entry point
+  App.vue          global providers + layout (sidebar / header / content)
+  router.ts        routes and the login guard
+  auth.ts          login state (token / user name / role / expiry), kept in sessionStorage
+  types.ts         API types
+  api.ts           fetch wrapper and endpoint functions
+  mock.ts          mock backend (loaded on demand, development only)
   views/           Login / Dashboard / AclRules / Placeholder
 ```
 
-## 接口约定（均在 /api 下）
+## User manual for AI assistants
 
-| 方法 | 路径 | 说明 |
+`public/llms.txt` is a plain-text user manual that AI assistants (such as Gemini in Chrome) can read to answer "how do I use this feature" questions. It describes the console as a user sees it, with no implementation details. When a feature or a label in the UI changes, update it there too.
+
+## API contract (all under /api)
+
+| Method | Path | Does |
 | --- | --- | --- |
-| POST | /api/session | 登录：`{user, password}` → `{token, ttl, role}` |
-| GET | /api/session | 当前会话：`{user, role, secs_left}` |
-| DELETE | /api/session | 退出登录 |
-| GET | /api/dashboard | 统计卡片、流量趋势、最近拦截事件 |
-| GET | /api/acl/rules | 返回全部规则数组（按优先级排序）；搜索、筛选、分页由前端完成 |
-| POST | /api/acl/rules | 新增规则 |
-| PUT | /api/acl/rules/:id | 更新规则（可部分字段） |
-| DELETE | /api/acl/rules/:id | 删除规则 |
-| GET | /api/config/pending | `{count}` 未保存的更改数 |
-| POST | /api/config/save | 保存配置 |
+| POST | /api/session | log in: `{user, password}` → `{token, ttl, role}` |
+| GET | /api/session | current session: `{user, role, secs_left}` |
+| DELETE | /api/session | log out |
+| GET | /api/dashboard | stats cards, traffic history, recent blocked events |
+| GET | /api/acl/rules | every rule as an array (sorted by priority); search, filters and paging are done in the browser |
+| POST | /api/acl/rules | add a rule |
+| PUT | /api/acl/rules/:id | update a rule (any subset of fields) |
+| DELETE | /api/acl/rules/:id | delete a rule |
+| GET | /api/config/pending | `{dirty}`: whether there are unsaved changes |
+| POST | /api/config/save | save the configuration |
 
-完整约定见后端仓库 lua-resty-sw-admin 的 `docs/api.md`。
+The full contract is `docs/api.md` in the backend repo lua-resty-sw-admin.
 
-- 除登录外，所有请求带 `Authorization: Bearer <token>`。token 存在 `sessionStorage`（不用 `localStorage`），登录后 `ttl` 秒过期且不能续期，过期前 1 分钟提示。
-- 错误响应体为 `{code, error}`：按状态码和 `code` 判断，`error` 仅用于提示。
-- 401：登录接口表示用户名或密码错误；其他接口表示会话已失效，跳转登录页。
-- 413、429 由 nginx 直接返回 HTML 页面，没有 JSON 响应体。
+- Every request but the login sends `Authorization: Bearer <token>`. The token is kept in `sessionStorage` (not `localStorage`), runs out `ttl` seconds after login and can't be renewed; the UI warns 1 minute before.
+- Error bodies are `{code, error}`: branch on the status and `code`; `error` is only for showing.
+- 401: on the login, a wrong user name or password; anywhere else, the session is over and the UI goes to the login page.
+- 413 and 429 come from nginx itself as HTML pages, with no JSON body.

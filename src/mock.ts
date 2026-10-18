@@ -23,7 +23,7 @@ function portless(p: Protocol) {
 }
 
 {
-  const names = ['办公网段', '运维跳板机', '海外扫描源', '数据库访问', 'DNS 服务', 'SSH 白名单', '恶意 IP 段', '监控探针']
+  const names = ['Office network', 'Ops jump host', 'Overseas scanners', 'Database access', 'DNS service', 'SSH allowlist', 'Malicious range', 'Monitoring probes']
   const protos: Protocol[] = ['tcp', 'udp', 'icmp', 'any']
   for (let i = 0; i < 57; i++) {
     const protocol = protos[i % 4]
@@ -94,7 +94,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   }],
   ['PUT', /^\/acl\/rules\/(\d+)$/, (m, { body }) => {
     const rule = mock.rules.find((r) => r.id === Number(m[1]))
-    if (!rule) throw new ApiError(404, 'invalid', '规则不存在')
+    if (!rule) throw new ApiError(404, 'invalid', 'no such rule')
     Object.assign(rule, body)
     if (portless(rule.protocol)) rule.port = null
     mock.dirty = true
@@ -118,5 +118,5 @@ export async function mockRequest<T>(method: string, path: string, opts: Request
     const match = m === method && path.match(re)
     if (match) return structuredClone(handler(match, opts)) as T
   }
-  throw new ApiError(404, 'invalid', `Mock 未实现: ${method} ${path}`)
+  throw new ApiError(404, 'invalid', `Not in the mock: ${method} ${path}`)
 }

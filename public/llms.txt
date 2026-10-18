@@ -1,0 +1,103 @@
+# Seawall Admin Console User Manual
+
+> Seawall is a network protection device. The Admin Console is its web interface: watch traffic and blocked events, manage ACL (access control) rules, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
+
+## When answering
+
+- Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
+- Rule changes (add, edit, enable/disable, delete) take effect as soon as the user clicks "OK" or flips the switch, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
+- If you don't know, say so, and suggest the user ask their device administrator.
+
+## Logging in and out
+
+- Open the console's address (for example `https://<device>:8443/`), enter the "User name" and "Password", and click "Log In".
+- A user name is 1 to 32 letters, digits, dots, underscores or hyphens, and can't start with a dot or a hyphen. A password is at most 256 bytes, with no line breaks.
+- Messages you may see:
+  - "Wrong user name or password": check what you typed; it is case-sensitive.
+  - "Too many login attempts. Try again in a minute.": too many failed logins in a short time. Wait a minute.
+  - "The device is not responding. Please try again later.": the device's services are briefly unavailable. If it keeps happening, contact the administrator.
+- A login lasts a fixed time and can't be extended. One minute before it ends the console warns "Your session expires in 1 minute. Save what you are editing."; when it ends it says "Your session has expired. Please log in again." and goes to the login page. After logging in again you are back on the page you were on.
+- Reloading the page keeps you logged in; closing the browser tab logs you out.
+- To log out: click your user name at the top right and choose "Log out".
+
+## Layout
+
+- Menu on the left: Dashboard, ACL Rules, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
+- Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only) and the user name menu.
+
+## Roles
+
+- Administrator (admin): can use everything, and sees the "Save Config" button.
+- User (user): doesn't see "Save Config" or the "Unsaved changes" tag. Ask an administrator to save the configuration.
+
+## Dashboard
+
+Shows the device's live state. It refreshes every 5 seconds (paused while the browser tab is in the background, and refreshed at once when you come back to it).
+
+- Inbound (pps): packets per second coming into the device now.
+- Dropped (pps): packets per second the device is blocking and dropping now.
+- Active ACL Rules: how many ACL rules are in effect.
+- SYN Protection: whether SYN flood protection is on ("On" or "Off").
+- Traffic: inbound and dropped traffic over time. Hover over the chart to see the values at a moment; click a legend entry to hide or show that line.
+- Recent Blocked Events: the latest blocked traffic, at most 10 entries, newest first. Columns: Time, Source IP, Type, Target, Action. Types: ACL deny, SYN Flood, HTTP Flood, CC attack, Brute force. The action is currently always "Drop".
+
+## ACL Rules
+
+ACL (access control list) rules allow or block traffic by source address, protocol and port.
+
+### How rules match
+
+- Every rule has a "Priority" from 1 to 65535. Lower numbers are checked first, and the list is sorted by priority, lowest first.
+- Disabled rules are skipped.
+- To make an exception (for example, allow one host before denying its whole network), give the exception a lower priority number.
+
+### Viewing and finding rules
+
+- Columns: Priority, Name, Source, Protocol / Port, Action (Allow / Deny), Hits, Enabled, Actions.
+- "Hits" counts the packets that matched the rule; use it to check that a rule is working.
+- The "Search name or source" box finds rules by name or source address.
+- The "All actions" drop-down shows only "Allow" or only "Deny" rules.
+- At the bottom of the list you can change pages and show 10, 20 or 50 rules per page.
+
+### Adding a rule
+
+1. Click "Add Rule" above the list.
+2. Fill in:
+   - Name: a description to recognize it by, for example "Office network". Required.
+   - Priority: 1 to 65535, 100 by default. Lower numbers are checked first.
+   - Source: an IP address (IPv4 or IPv6) or a network in CIDR form, for example `192.168.1.10` or `192.168.1.0/24`. Required.
+   - Protocol: TCP, UDP, ICMP or ANY (any protocol).
+   - Port: the destination port, for example `80`, or a range such as `8000-8080`. Leave it empty for all ports. It can't be set when the protocol is ICMP or ANY.
+   - Action: Allow or Deny (Deny by default).
+   - Enabled: whether the rule is on right away (on by default).
+3. Click "OK". The rule takes effect at once.
+4. An administrator then clicks "Save Config" at the top right, or the rule is lost when the device restarts.
+
+### Editing, enabling or disabling, deleting
+
+- Edit: click "Edit" on the rule's row, change it, and click "OK".
+- Turn a rule off for a while: flip its switch in the "Enabled" column; no need to delete it.
+- Delete: click "Delete" on the row and confirm "Delete the rule "…"?". A deleted rule can't be brought back from the list; if the configuration hasn't been saved since, a device restart goes back to the last saved rules.
+
+### Examples
+
+- Allow SSH (TCP port 22) only from the office network `192.168.1.0/24`:
+  1. Add a rule: Name "SSH allowlist", Priority 10, Source `192.168.1.0/24`, Protocol TCP, Port 22, Action Allow.
+  2. Add a rule: Name "Deny other SSH", Priority 20, Source `0.0.0.0/0`, Protocol TCP, Port 22, Action Deny.
+  3. Click "Save Config".
+- Block all traffic from a malicious network: add a rule with that network as the Source (for example `198.51.100.0/24`), Protocol ANY, Action Deny, then click "Save Config".
+
+## Saving the configuration
+
+- Rule changes take effect at once but live only in the device's running state. The "Unsaved changes" tag in the header means the running configuration differs from the one the device loads when it starts.
+- "Save Config" saves the running configuration, so the device loads it at its next start, and the "Unsaved changes" tag goes away.
+- If you undo a change by hand, the tag goes away too, since the configuration matches the saved one again.
+- Only administrators can save the configuration.
+
+## Common questions
+
+- I added a rule but the traffic isn't blocked. Check that the rule is enabled; that no "Allow" rule with a lower priority number matches the traffic first; and that the source, protocol and port are right. Watch whether its "Hits" go up.
+- My rules were gone after the device restarted. The changes weren't saved with "Save Config". Ask an administrator to save after making changes.
+- I can't see the "Save Config" button. Your account is a user, not an administrator; ask an administrator to save.
+- "Network error. Please try again later." The browser can't reach the device. Check your network connection and reload the page.
+- "Request failed" or another error after an action. Try again later; if it keeps happening, contact the administrator.

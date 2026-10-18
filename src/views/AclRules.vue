@@ -34,7 +34,7 @@ const pagination = reactive({
   pageSize: 10,
   showSizePicker: true,
   pageSizes: [10, 20, 50],
-  prefix: ({ itemCount }: { itemCount: number | undefined }) => `共 ${itemCount ?? 0} 条`,
+  prefix: ({ itemCount }: { itemCount: number | undefined }) => `${itemCount ?? 0} in total`,
 })
 
 async function load() {
@@ -79,14 +79,14 @@ async function mutate(fn: () => Promise<unknown>, okText: string) {
 async function onToggle(row: AclRule, enabled: boolean) {
   row.enabled = enabled
   try {
-    await mutate(() => updateAclRule(row.id, { enabled }), enabled ? '规则已启用' : '规则已停用')
+    await mutate(() => updateAclRule(row.id, { enabled }), enabled ? 'Rule enabled' : 'Rule disabled')
   } catch {
     row.enabled = !enabled
   }
 }
 
 async function onDelete(row: AclRule) {
-  await mutate(() => deleteAclRule(row.id), '规则已删除').catch(() => {})
+  await mutate(() => deleteAclRule(row.id), 'Rule deleted').catch(() => {})
 }
 
 // ---------- add / edit dialog ----------
@@ -95,8 +95,8 @@ const protocolLabels: Record<Protocol, string> = { tcp: 'TCP', udp: 'UDP', icmp:
 const protocolOptions = (Object.keys(protocolLabels) as Protocol[]).map((p) => ({ label: protocolLabels[p], value: p }))
 const portless = (p: Protocol) => p === 'icmp' || p === 'any'
 const actionOptions = [
-  { label: '允许', value: 'allow' },
-  { label: '拒绝', value: 'deny' },
+  { label: 'Allow', value: 'allow' },
+  { label: 'Deny', value: 'deny' },
 ]
 
 /** The dialog's fields: a rule, with the port as the input box's text ('' for any port). */
@@ -119,9 +119,9 @@ const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 
 const formRules: FormRules = {
-  name: { required: true, message: '请输入规则名称', trigger: 'blur' },
-  source: { required: true, message: '请输入源地址，例如 10.0.0.0/8', trigger: 'blur' },
-  priority: { required: true, type: 'number', message: '请输入优先级', trigger: 'blur' },
+  name: { required: true, message: 'Enter a rule name', trigger: 'blur' },
+  source: { required: true, message: 'Enter a source address, for example 10.0.0.0/8', trigger: 'blur' },
+  priority: { required: true, type: 'number', message: 'Enter a priority', trigger: 'blur' },
 }
 
 function openEditor(row?: AclRule) {
@@ -143,10 +143,10 @@ async function onSubmit() {
   submitting.value = true
   try {
     if (editingId.value === null) {
-      await mutate(() => createAclRule(data), '规则已添加')
+      await mutate(() => createAclRule(data), 'Rule added')
     } else {
       const id = editingId.value
-      await mutate(() => updateAclRule(id, data), '规则已更新')
+      await mutate(() => updateAclRule(id, data), 'Rule updated')
     }
     showEditor.value = false
   } catch {
@@ -159,39 +159,39 @@ async function onSubmit() {
 // ---------- table ----------
 
 const columns: DataTableColumns<AclRule> = [
-  { title: '优先级', key: 'priority', width: 80 },
-  { title: '名称', key: 'name', ellipsis: { tooltip: true } },
-  { title: '源地址', key: 'source' },
-  { title: '协议/端口', key: 'protocol', render: (r) => protocolLabels[r.protocol] + (portless(r.protocol) ? '' : ` / ${r.port ?? '全部'}`) },
+  { title: 'Priority', key: 'priority', width: 80 },
+  { title: 'Name', key: 'name', ellipsis: { tooltip: true } },
+  { title: 'Source', key: 'source' },
+  { title: 'Protocol / Port', key: 'protocol', render: (r) => protocolLabels[r.protocol] + (portless(r.protocol) ? '' : ` / ${r.port ?? 'all'}`) },
   {
-    title: '动作',
+    title: 'Action',
     key: 'action',
     width: 80,
     render: (r) =>
       h(NTag, { type: r.action === 'allow' ? 'success' : 'error', size: 'small' }, () =>
-        r.action === 'allow' ? '允许' : '拒绝',
+        r.action === 'allow' ? 'Allow' : 'Deny',
       ),
   },
-  { title: '命中次数', key: 'hits', width: 110, render: (r) => r.hits.toLocaleString('zh-CN') },
+  { title: 'Hits', key: 'hits', width: 110, render: (r) => r.hits.toLocaleString('en-US') },
   {
-    title: '启用',
+    title: 'Enabled',
     key: 'enabled',
     width: 70,
     render: (r) => h(NSwitch, { value: r.enabled, size: 'small', onUpdateValue: (v: boolean) => onToggle(r, v) }),
   },
   {
-    title: '操作',
+    title: 'Actions',
     key: 'ops',
     width: 130,
     render: (r) =>
       h(NSpace, { size: 4 }, () => [
-        h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEditor(r) }, () => '编辑'),
+        h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEditor(r) }, () => 'Edit'),
         h(
           NPopconfirm,
           { onPositiveClick: () => onDelete(r) },
           {
-            trigger: () => h(NButton, { size: 'small', text: true, type: 'error' }, () => '删除'),
-            default: () => `确定删除规则「${r.name}」吗？`,
+            trigger: () => h(NButton, { size: 'small', text: true, type: 'error' }, () => 'Delete'),
+            default: () => `Delete the rule "${r.name}"?`,
           },
         ),
       ]),
@@ -203,16 +203,16 @@ const columns: DataTableColumns<AclRule> = [
   <NCard>
     <NSpace justify="space-between" style="margin-bottom: 16px">
       <NSpace>
-        <NInput v-model:value="keyword" placeholder="搜索名称或源地址" clearable style="width: 240px" />
+        <NInput v-model:value="keyword" placeholder="Search name or source" clearable style="width: 240px" />
         <NSelect
           v-model:value="action"
           :options="actionOptions"
-          placeholder="全部动作"
+          placeholder="All actions"
           clearable
           style="width: 140px"
         />
       </NSpace>
-      <NButton type="primary" @click="openEditor()">添加规则</NButton>
+      <NButton type="primary" @click="openEditor()">Add Rule</NButton>
     </NSpace>
 
     <NDataTable
@@ -229,15 +229,15 @@ const columns: DataTableColumns<AclRule> = [
   <NModal
     v-model:show="showEditor"
     preset="card"
-    :title="editingId === null ? '添加规则' : '编辑规则'"
+    :title="editingId === null ? 'Add Rule' : 'Edit Rule'"
     style="width: 520px"
     :mask-closable="false"
   >
     <NForm ref="formRef" :model="form" :rules="formRules" label-placement="left" label-width="80">
-      <NFormItem label="名称" path="name">
+      <NFormItem label="Name" path="name">
         <NInput v-model:value="form.name" />
       </NFormItem>
-      <NFormItem label="优先级" path="priority">
+      <NFormItem label="Priority" path="priority">
         <NInputNumber
           :value="form.priority"
           :min="1" :max="65535"
@@ -245,33 +245,33 @@ const columns: DataTableColumns<AclRule> = [
           @update:value="(v) => (form.priority = v ?? 1)"
         />
       </NFormItem>
-      <NFormItem label="源地址" path="source">
-        <NInput v-model:value="form.source" placeholder="IP 或 CIDR，例如 192.168.1.0/24" />
+      <NFormItem label="Source" path="source">
+        <NInput v-model:value="form.source" placeholder="IP or CIDR, for example 192.168.1.0/24" />
       </NFormItem>
-      <NFormItem label="协议">
+      <NFormItem label="Protocol">
         <NSelect v-model:value="form.protocol" :options="protocolOptions" />
       </NFormItem>
-      <NFormItem label="端口">
+      <NFormItem label="Port">
         <NInput
           v-model:value="form.port"
-          placeholder="例如 80、8000-8080，留空表示全部"
+          placeholder="For example 80 or 8000-8080; empty for all"
           :disabled="portless(form.protocol)"
         />
       </NFormItem>
-      <NFormItem label="动作">
+      <NFormItem label="Action">
         <NRadioGroup v-model:value="form.action">
-          <NRadioButton value="allow">允许</NRadioButton>
-          <NRadioButton value="deny">拒绝</NRadioButton>
+          <NRadioButton value="allow">Allow</NRadioButton>
+          <NRadioButton value="deny">Deny</NRadioButton>
         </NRadioGroup>
       </NFormItem>
-      <NFormItem label="启用">
+      <NFormItem label="Enabled">
         <NSwitch v-model:value="form.enabled" />
       </NFormItem>
     </NForm>
     <template #footer>
       <NSpace justify="end">
-        <NButton @click="showEditor = false">取消</NButton>
-        <NButton type="primary" :loading="submitting" @click="onSubmit">确定</NButton>
+        <NButton @click="showEditor = false">Cancel</NButton>
+        <NButton type="primary" :loading="submitting" @click="onSubmit">OK</NButton>
       </NSpace>
     </template>
   </NModal>

@@ -37,12 +37,12 @@ function startSession(s: Session) {
   const left = s.expiresAt - Date.now()
   if (left > EXPIRY_WARNING_MS) {
     warnTimer = window.setTimeout(
-      () => message.warning('登录将在 1 分钟后过期，请保存正在编辑的内容', { duration: 10_000 }),
+      () => message.warning('Your session expires in 1 minute. Save what you are editing.', { duration: 10_000 }),
       left - EXPIRY_WARNING_MS,
     )
   }
   expireTimer = window.setTimeout(() => {
-    message.warning('登录已过期，请重新登录')
+    message.warning('Your session has expired. Please log in again.')
     endSession()
   }, Math.max(left, 0))
 }
@@ -84,11 +84,11 @@ async function request<T>(method: string, path: string, opts: RequestOptions = {
     }
     return await fetchRequest<T>(method, path, opts)
   } catch (e) {
-    const err = e instanceof ApiError ? e : new ApiError(0, null, '网络错误，请稍后重试')
+    const err = e instanceof ApiError ? e : new ApiError(0, null, 'Network error. Please try again later.')
     if (opts.silent) throw err
     if (err.status === 401) {
       // the token expired or was ended
-      message.warning('登录已过期，请重新登录')
+      message.warning('Your session has expired. Please log in again.')
       endSession()
     } else {
       message.error(err.message)
@@ -112,7 +112,7 @@ async function fetchRequest<T>(method: string, path: string, { query, body }: Re
   const isJson = (res.headers.get('Content-Type') ?? '').startsWith('application/json')
   const data = isJson ? await res.json().catch(() => undefined) : undefined
   if (!res.ok) {
-    const fallback = res.status === 429 ? '尝试过于频繁，请稍后再试' : `请求失败 (${res.status})`
+    const fallback = res.status === 429 ? 'Too many attempts. Please try again later.' : `Request failed (${res.status})`
     throw new ApiError(res.status, data?.code ?? null, data?.error ?? fallback)
   }
   return data as T

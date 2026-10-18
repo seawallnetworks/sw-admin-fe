@@ -15,28 +15,28 @@ const USER_RE = /^(?![.-])[A-Za-z0-9._-]{1,32}$/
 const PASSWORD_MAX_BYTES = 256
 const rules: FormRules = {
   user: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { required: true, message: 'Enter your user name', trigger: 'blur' },
     {
       validator: (_rule, v: string) => !v || USER_RE.test(v),
-      message: '用户名为 1-32 个字母、数字或 . _ -，且不能以 . 或 - 开头',
+      message: 'A user name is 1 to 32 letters, digits, dots, underscores or hyphens, and can\'t start with a dot or a hyphen',
       trigger: 'blur',
     },
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
+    { required: true, message: 'Enter your password', trigger: 'blur' },
     {
       validator: (_rule, v: string) => !/[\r\n\0]/.test(v) && new TextEncoder().encode(v).length <= PASSWORD_MAX_BYTES,
-      message: '密码不能超过 256 字节，且不能包含换行',
+      message: 'A password is at most 256 bytes, with no line breaks',
       trigger: 'blur',
     },
   ],
 }
 
 function loginError(e: unknown) {
-  if (!(e instanceof ApiError)) return '登录失败'
-  if (e.status === 401) return '用户名或密码错误'
-  if (e.status === 429) return '登录尝试过于频繁，请一分钟后再试'
-  if (e.status === 502) return '设备无响应，请稍后重试'
+  if (!(e instanceof ApiError)) return 'Login failed'
+  if (e.status === 401) return 'Wrong user name or password'
+  if (e.status === 429) return 'Too many login attempts. Try again in a minute.'
+  if (e.status === 502) return 'The device is not responding. Please try again later.'
   return e.message
 }
 const loading = ref(false)
@@ -64,22 +64,22 @@ async function onSubmit() {
 
 <template>
   <div class="page">
-    <NCard title="Seawall 管理控制台" class="card" :bordered="false">
+    <NCard title="Seawall Admin Console" class="card" :bordered="false">
       <NForm ref="formRef" :model="form" :rules="rules" :show-require-mark="false" @submit.prevent="onSubmit">
-        <NFormItem label="用户名" path="user">
-          <NInput v-model:value="form.user" placeholder="用户名" autofocus />
+        <NFormItem label="User name" path="user">
+          <NInput v-model:value="form.user" placeholder="User name" autofocus />
         </NFormItem>
-        <NFormItem label="密码" path="password">
+        <NFormItem label="Password" path="password">
           <NInput
             v-model:value="form.password"
             type="password"
             show-password-on="click"
-            placeholder="密码"
+            placeholder="Password"
           />
         </NFormItem>
         <NAlert v-if="error" type="error" :show-icon="true" class="error">{{ error }}</NAlert>
-        <NButton type="primary" block attr-type="submit" :loading="loading">登录</NButton>
-        <p v-if="USE_MOCK" class="hint">Mock 模式：admin / admin</p>
+        <NButton type="primary" block attr-type="submit" :loading="loading">Log In</NButton>
+        <p v-if="USE_MOCK" class="hint">Mock mode: admin / admin</p>
       </NForm>
     </NCard>
   </div>
