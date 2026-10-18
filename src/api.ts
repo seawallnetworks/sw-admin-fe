@@ -1,12 +1,12 @@
 import { ref } from 'vue'
 import { createDiscreteApi } from 'naive-ui'
 import { router } from './router'
-import { clearSession, getToken, setSession } from './auth'
+import { clearSession, getSession, getToken, setSession, type Session } from './auth'
 import { ApiError } from './types'
-import type { AclRule, AclRuleInput, DashboardData, RequestOptions } from './types'
+import type { AclRule, AclRuleInput, DashboardData, RequestOptions, Role } from './types'
 
 export * from './types'
-export { getToken, getUsername } from './auth'
+export { getRole, getToken, getUsername } from './auth'
 
 /**
  * Mock mode is controlled by VITE_USE_MOCK (see .env.development).
@@ -16,14 +16,59 @@ export { getToken, getUsername } from './auth'
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 const BASE = '/api'
+/** Warn this long before the token runs out. */
+const EXPIRY_WARNING_MS = 60_000
 
 const { message } = createDiscreteApi(['message'])
 
 // ---------- auth state ----------
 
-export function logout() {
+/** Whether the backend has confirmed the stored token since the page loaded. */
+let verified: Promise<boolean> | null = null
+let warnTimer: number | undefined
+let expireTimer: number | undefined
+
+/** Stores the session and sets the timers that warn before it runs out and end it when it has. */
+function startSession(s: Session) {
+  setSession(s)
+
+  window.clearTimeout(warnTimer)
+  window.clearTimeout(expireTimer)
+  const left = s.expiresAt - Date.now()
+  if (left > EXPIRY_WARNING_MS) {
+    warnTimer = window.setTimeout(
+      () => message.warning('登录将在 1 分钟后过期，请保存正在编辑的内容', { duration: 10_000 }),
+      left - EXPIRY_WARNING_MS,
+    )
+  }
+  expireTimer = window.setTimeout(() => {
+    message.warning('登录已过期，请重新登录')
+    endSession()
+  }, Math.max(left, 0))
+}
+
+function dropSession() {
   clearSession()
-  router.replace({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+  verified = null
+  window.clearTimeout(warnTimer)
+  window.clearTimeout(expireTimer)
+}
+
+/** Drops the session and goes to the login page, back here after the next login. */
+function endSession() {
+  dropSession()
+  const current = router.currentRoute.value
+  if (!current.meta.public) router.replace({ path: '/login', query: { redirect: current.fullPath } })
+}
+
+/** Logs out: ends the token on the backend, and drops it here whether or not that worked. */
+export function logout() {
+  const token = getToken()
+  if (token && !USE_MOCK) {
+    // not through request(): a 401 here must not start another logout
+    fetch(BASE + '/session', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
+  }
+  endSession()
 }
 
 /** Number of config changes not yet persisted with "Save Config". */
@@ -39,11 +84,13 @@ async function request<T>(method: string, path: string, opts: RequestOptions = {
     }
     return await fetchRequest<T>(method, path, opts)
   } catch (e) {
-    const err = e instanceof ApiError ? e : new ApiError(0, '网络错误，请稍后重试')
-    if (err.status === 401 && path !== '/auth/login') {
+    const err = e instanceof ApiError ? e : new ApiError(0, null, '网络错误，请稍后重试')
+    if (opts.silent) throw err
+    if (err.status === 401) {
+      // the token expired or was ended
       message.warning('登录已过期，请重新登录')
-      logout()
-    } else if (!opts.silent) {
+      endSession()
+    } else {
       message.error(err.message)
     }
     throw err
@@ -61,8 +108,13 @@ async function fetchRequest<T>(method: string, path: string, { query, body }: Re
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
-  const data = res.status === 204 ? undefined : await res.json().catch(() => undefined)
-  if (!res.ok) throw new ApiError(res.status, data?.message ?? `请求失败 (${res.status})`)
+  // nginx's own errors (413, 429, ...) are HTML pages
+  const isJson = (res.headers.get('Content-Type') ?? '').startsWith('application/json')
+  const data = isJson ? await res.json().catch(() => undefined) : undefined
+  if (!res.ok) {
+    const fallback = res.status === 429 ? '尝试过于频繁，请稍后再试' : `请求失败 (${res.status})`
+    throw new ApiError(res.status, data?.code ?? null, data?.error ?? fallback)
+  }
   return data as T
 }
 
@@ -74,9 +126,40 @@ const del = <T>(path: string) => request<T>('DELETE', path)
 
 // ---------- endpoints ----------
 
-export async function login(username: string, password: string) {
-  const res = await post<{ token: string }>('/auth/login', { username, password }, true)
-  setSession(res.token, username)
+/** Logs in. Throws ApiError: 401 for a wrong user name or password, 429 over the login limit. */
+export async function login(user: string, password: string) {
+  const res = await post<{ token: string; ttl: number; role: Role }>('/session', { user, password }, true)
+  // the backend accepted this exact name, so it is the session's user
+  startSession({ token: res.token, user, role: res.role, expiresAt: Date.now() + res.ttl * 1000 })
+  verified = Promise.resolve(true)
+}
+
+/**
+ * Whether there is a usable session. The first call after a page load checks the stored token with
+ * GET /session and refreshes the user, role and time left; a token the backend refuses is dropped.
+ * If the backend can't be asked, the stored session is kept and the next call will find out.
+ */
+export function ensureSession(): Promise<boolean> {
+  if (!getSession()) return Promise.resolve(false)
+  verified ??= get<{ user: string; role: Role; secs_left: number }>('/session', undefined, true).then(
+    (s) => {
+      const stored = getSession()
+      if (!stored) return false // logged out meanwhile
+      startSession({ token: stored.token, user: s.user, role: s.role, expiresAt: Date.now() + s.secs_left * 1000 })
+      return true
+    },
+    (e) => {
+      if (e instanceof ApiError && e.status === 401) {
+        dropSession()
+        return false
+      }
+      const stored = getSession()
+      if (stored) startSession(stored) // restart the expiry timers from the stored time
+      verified = null
+      return stored !== null
+    },
+  )
+  return verified
 }
 
 export const fetchDashboard = () => get<DashboardData>('/dashboard')

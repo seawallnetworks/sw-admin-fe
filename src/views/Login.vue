@@ -2,16 +2,42 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NCard, NForm, NFormItem, NInput, type FormInst, type FormRules } from 'naive-ui'
-import { USE_MOCK, login } from '../api'
+import { ApiError, USE_MOCK, login } from '../api'
 
 const router = useRouter()
 const route = useRoute()
 
 const formRef = ref<FormInst | null>(null)
-const form = reactive({ username: '', password: '' })
+const form = reactive({ user: '', password: '' })
+
+// sw_authd's rules; a login outside them fails like a wrong password, so say why here instead
+const USER_RE = /^(?![.-])[A-Za-z0-9._-]{1,32}$/
+const PASSWORD_MAX_BYTES = 256
 const rules: FormRules = {
-  username: { required: true, message: '请输入用户名', trigger: 'blur' },
-  password: { required: true, message: '请输入密码', trigger: 'blur' },
+  user: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    {
+      validator: (_rule, v: string) => !v || USER_RE.test(v),
+      message: '用户名为 1-32 个字母、数字或 . _ -，且不能以 . 或 - 开头',
+      trigger: 'blur',
+    },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    {
+      validator: (_rule, v: string) => !/[\r\n\0]/.test(v) && new TextEncoder().encode(v).length <= PASSWORD_MAX_BYTES,
+      message: '密码不能超过 256 字节，且不能包含换行',
+      trigger: 'blur',
+    },
+  ],
+}
+
+function loginError(e: unknown) {
+  if (!(e instanceof ApiError)) return '登录失败'
+  if (e.status === 401) return '用户名或密码错误'
+  if (e.status === 429) return '登录尝试过于频繁，请一分钟后再试'
+  if (e.status === 502) return '设备无响应，请稍后重试'
+  return e.message
 }
 const loading = ref(false)
 const error = ref('')
@@ -25,11 +51,11 @@ async function onSubmit() {
   }
   loading.value = true
   try {
-    await login(form.username, form.password)
+    await login(form.user, form.password)
     const redirect = route.query.redirect
     router.replace(typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/dashboard')
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '登录失败'
+    error.value = loginError(e)
   } finally {
     loading.value = false
   }
@@ -40,8 +66,8 @@ async function onSubmit() {
   <div class="page">
     <NCard title="Seawall 管理控制台" class="card" :bordered="false">
       <NForm ref="formRef" :model="form" :rules="rules" :show-require-mark="false" @submit.prevent="onSubmit">
-        <NFormItem label="用户名" path="username">
-          <NInput v-model:value="form.username" placeholder="用户名" autofocus />
+        <NFormItem label="用户名" path="user">
+          <NInput v-model:value="form.user" placeholder="用户名" autofocus />
         </NFormItem>
         <NFormItem label="密码" path="password">
           <NInput

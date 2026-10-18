@@ -7,7 +7,11 @@ import type { AclRule, AclRuleInput, DashboardData, Protocol, RequestOptions } f
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
 
+const MOCK_TTL = 900
+
 const mock = {
+  /** The mock's login time is per page load, so a reload restarts the 15 minutes. */
+  loginAt: Date.now(),
   pending: 0,
   nextId: 1,
   rules: [] as AclRule[],
@@ -36,11 +40,20 @@ const fmtTime = (d: Date) => d.toLocaleTimeString('zh-CN', { hour12: false })
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
-  ['POST', /^\/auth\/login$/, (_, { body }) => {
-    const { username, password } = body as { username: string; password: string }
-    if (username === 'admin' && password === 'admin') return { token: 'mock-token' }
-    throw new ApiError(401, '用户名或密码错误')
+  ['POST', /^\/session$/, (_, { body }) => {
+    const { user, password } = body as { user: string; password: string }
+    if (user === 'admin' && password === 'admin') {
+      mock.loginAt = Date.now()
+      return { token: '0123456789abcdef0123456789abcdef', ttl: MOCK_TTL, role: 'admin' }
+    }
+    throw new ApiError(401, 'denied', 'denied')
   }],
+  ['GET', /^\/session$/, () => ({
+    user: 'admin',
+    role: 'admin',
+    secs_left: Math.max(0, MOCK_TTL - Math.floor((Date.now() - mock.loginAt) / 1000)),
+  })],
+  ['DELETE', /^\/session$/, () => ({})],
   ['GET', /^\/dashboard$/, () => {
     const now = Date.now()
     const traffic = Array.from({ length: 30 }, (_, i) => {
@@ -74,7 +87,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   }],
   ['PUT', /^\/acl\/rules\/(\d+)$/, (m, { body }) => {
     const rule = mock.rules.find((r) => r.id === Number(m[1]))
-    if (!rule) throw new ApiError(404, '规则不存在')
+    if (!rule) throw new ApiError(404, 'invalid', '规则不存在')
     Object.assign(rule, body)
     mock.pending++
     return rule
@@ -91,10 +104,10 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
 
 export async function mockRequest<T>(method: string, path: string, opts: RequestOptions): Promise<T> {
   await new Promise((r) => setTimeout(r, rand(100, 300)))
-  if (path !== '/auth/login' && !getToken()) throw new ApiError(401, '未登录')
+  if (!(method === 'POST' && path === '/session') && !getToken()) throw new ApiError(401, 'expired', 'no token')
   for (const [m, re, handler] of mockRoutes) {
     const match = m === method && path.match(re)
     if (match) return structuredClone(handler(match, opts)) as T
   }
-  throw new ApiError(404, `Mock 未实现: ${method} ${path}`)
+  throw new ApiError(404, 'invalid', `Mock 未实现: ${method} ${path}`)
 }

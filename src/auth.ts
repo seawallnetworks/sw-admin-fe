@@ -1,18 +1,36 @@
-// Login session storage. No imports on purpose: router.ts and api.ts both depend
-// on this, so keeping it a leaf avoids a circular import between them.
+// Login session storage. No imports on purpose (type-only ones aside): router.ts and api.ts both
+// depend on this, so keeping it a leaf avoids a circular import between them.
+//
+// The session lives in sessionStorage, never localStorage: a reload keeps it, closing the tab drops it.
 
-const TOKEN_KEY = 'sw_token'
-const USER_KEY = 'sw_user'
+import type { Role } from './types'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY)
-export const getUsername = () => localStorage.getItem(USER_KEY) ?? ''
+const SESSION_KEY = 'sw_session'
 
-export function setSession(token: string, username: string) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, username)
+export interface Session {
+  token: string
+  user: string
+  role: Role
+  /** Epoch ms when the token runs out; it can't be renewed. */
+  expiresAt: number
+}
+
+export function getSession(): Session | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null')
+  } catch {
+    return null
+  }
+}
+
+export const getToken = () => getSession()?.token ?? null
+export const getUsername = () => getSession()?.user ?? ''
+export const getRole = () => getSession()?.role ?? null
+
+export function setSession(s: Session) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(s))
 }
 
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+  sessionStorage.removeItem(SESSION_KEY)
 }

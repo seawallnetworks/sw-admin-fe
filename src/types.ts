@@ -34,17 +34,22 @@ export interface DashboardData {
   events: BlockedEvent[]
 }
 
+export type Role = 'admin' | 'user'
+
 export interface RequestOptions {
   query?: Record<string, string | number | undefined>
   body?: unknown
-  /** Don't show a toast on error; caller handles it. */
+  /** The caller handles every error itself, a 401 included: no toast, no redirect to the login page. */
   silent?: boolean
 }
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** The backend's one-word reason ("denied", "perm", ...); null when the reply wasn't JSON. */
+  code: string | null
+  constructor(status: number, code: string | null, message: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
