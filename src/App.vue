@@ -3,14 +3,14 @@ import { computed, h, ref, watch, type Component } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NIcon, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
-  NMenu, NMessageProvider, NSpace, NTag, NTooltip, darkTheme, dateEnUS, enUS, type DropdownOption, type MenuOption,
+  NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type DropdownOption, type MenuOption,
 } from 'naive-ui'
 import HelpDrawer from './components/HelpDrawer.vue'
 import {
   AclIcon, BrandIcon, BruteForceIcon, CcIcon, DashboardIcon, DdosIcon, HttpFloodIcon, LogsIcon,
 } from './icons'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
-import { isDark, setThemeMode, themeMode, type ThemeMode } from './theme'
+import { naiveTheme, setThemeMode, themeMode, type ThemeMode } from './theme'
 
 const route = useRoute()
 const isPublic = computed(() => route.meta.public)
@@ -82,7 +82,12 @@ function onUserSelect(key: string) {
 </script>
 
 <template>
-  <NConfigProvider :theme="isDark ? darkTheme : null" :locale="enUS" :date-locale="dateEnUS">
+  <NConfigProvider
+    :theme="naiveTheme.theme"
+    :theme-overrides="naiveTheme.themeOverrides"
+    :locale="enUS"
+    :date-locale="dateEnUS"
+  >
     <NMessageProvider>
       <NDialogProvider>
         <RouterView v-if="isPublic" />

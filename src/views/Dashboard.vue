@@ -90,7 +90,7 @@ const chartOption = computed<
     legend: { data: ['Inbound', 'Dropped'], top: 0 },
     grid: { left: 60, right: 20, top: 36, bottom: 30 },
     xAxis: { type: 'category', boundaryGap: false, data: t.map((p) => fmtTime(p.time)) },
-    yAxis: { type: 'value', name: 'pps' },
+    yAxis: { type: 'value', name: 'pps', splitLine: { lineStyle: { color: color('--c-border') } } },
     series: [
       { name: 'Inbound', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, data: t.map((p) => p.inbound_pps) },
       { name: 'Dropped', type: 'line', smooth: true, showSymbol: false, data: t.map((p) => p.dropped_pps) },

@@ -3,8 +3,8 @@
  * (index.html does it first, before the app loads, so a dark page never flashes white).
  *
  * Accent colors are for bars, borders and fills; text colors are for words, and meet 4.5:1
- * contrast on the page and card backgrounds of their theme. The dark values are Naive UI's dark
- * palette, so our colors match its components.
+ * contrast on the page and card backgrounds of their theme. The dark values are GitHub's (Primer
+ * "Dark default"), as are Naive UI's in the dark theme (GITHUB_DARK in src/theme.ts).
  */
 :root {
   color-scheme: light;
@@ -38,30 +38,30 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --c-page-bg: #101014;
-  --c-code-bg: rgba(255, 255, 255, 0.08);
-  --c-border: rgba(255, 255, 255, 0.14);
-  --c-border-strong: rgba(255, 255, 255, 0.24);
-  --c-subtle-bg: rgba(255, 255, 255, 0.05);
-  --c-subtle-bg-2: rgba(255, 255, 255, 0.1);
+  --c-page-bg: #0d1117;
+  --c-code-bg: rgba(110, 118, 129, 0.4);
+  --c-border: #30363d;
+  --c-border-strong: #484f58;
+  --c-subtle-bg: rgba(110, 118, 129, 0.1);
+  --c-subtle-bg-2: rgba(110, 118, 129, 0.2);
 
-  --c-muted: #9a9aa0;
+  --c-muted: #9198a1;
 
-  --c-success: #63e2b7;
-  --c-error: #e88080;
-  --c-warning: #f2c97d;
-  --c-info: #70c0e8;
+  --c-success: #3fb950;
+  --c-error: #f85149;
+  --c-warning: #d29922;
+  --c-info: #4493f8;
 
-  --c-success-text: #63e2b7;
-  --c-error-text: #e88080;
-  --c-warning-text: #f2c97d;
-  --c-info-text: #70c0e8;
+  --c-success-text: #3fb950;
+  --c-error-text: #ff7b72;
+  --c-warning-text: #d29922;
+  --c-info-text: #58a6ff;
 
-  --c-success-tint: rgba(99, 226, 183, 0.12);
-  --c-error-tint: rgba(232, 128, 128, 0.14);
-  --c-error-tint-weak: rgba(232, 128, 128, 0.08);
-  --c-warning-tint: rgba(242, 201, 125, 0.1);
-  --c-info-tint: rgba(112, 192, 232, 0.12);
+  --c-success-tint: rgba(46, 160, 67, 0.15);
+  --c-error-tint: rgba(248, 81, 73, 0.15);
+  --c-error-tint-weak: rgba(248, 81, 73, 0.08);
+  --c-warning-tint: rgba(187, 128, 9, 0.15);
+  --c-info-tint: rgba(56, 139, 253, 0.15);
 }
 
 html,
