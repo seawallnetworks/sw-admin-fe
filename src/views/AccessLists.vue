@@ -7,6 +7,8 @@ import {
 } from 'naive-ui'
 import AceAddrInput from '../components/AceAddrInput.vue'
 import AcePortInput from '../components/AcePortInput.vue'
+import EffectivePolicy from '../components/EffectivePolicy.vue'
+import { isVeryBroad, positionOptions, shadowingEntry } from '../policy'
 import {
   NAMED_PROTOCOLS, aceFormErrors, buildAce, emptyAceForm, hasPorts, parseAce, type AceForm, type AceProtocol,
 } from '../ace'
@@ -27,8 +29,9 @@ const kindLabel = (acl: number) => (isStandard(acl) ? 'Standard' : 'Extended')
 
 const config = ref<DeviceConfig['config'] | null>(null)
 const loading = ref(false)
-/** The list whose tab is open. */
-const selected = ref<number | null>(null)
+/** The tab that is open: a list's number, or the Effective Policy. */
+const POLICY_TAB = 'policy'
+const selected = ref<number | typeof POLICY_TAB | null>(null)
 /** The configuration's generation when it was read; it moves with every change, from anyone. */
 const generation = ref<number | null>(null)
 
@@ -46,7 +49,7 @@ async function loadConfig() {
     const res = await getConfig()
     config.value = res.config
     generation.value = res.generation ?? null
-    if (selected.value === null || !aclNumbers.value.includes(selected.value)) {
+    if (selected.value === null || (selected.value !== POLICY_TAB && !aclNumbers.value.includes(selected.value))) {
       selected.value = aclNumbers.value[0] ?? null
     }
   } catch {
@@ -260,7 +263,55 @@ const entryAcl = ref(0)
 const entryForm = ref<AceForm>(emptyAceForm())
 const typeEntry = ref(false)
 const entryAce = ref('')
-const entrySeq = ref<number | null>(null)
+/** Where the entry goes: a positionOptions() key. */
+const entryPos = ref('end')
+
+/** The list's entries as the page has them. */
+const entryList = computed<AclEntry[]>(() => config.value?.acls[entryAcl.value] ?? [])
+const positions = computed(() => positionOptions(entryList.value))
+const positionSelect = computed(() =>
+  positions.value.map((o) => ({
+    label: o.seq === null ? `${o.label} · no free number` : `${o.label} · seq ${o.seq}`,
+    value: o.key,
+    disabled: o.seq === null,
+  })),
+)
+const entrySeq = computed(() => positions.value.find((o) => o.key === entryPos.value)?.seq ?? null)
+
+/** The entry as it would be sent: typed, or built by the form. */
+const pendingAce = computed(() => (typeEntry.value ? entryAce.value.trim() : builtAce.value))
+/** The list with the new entry in its place, for "Where it goes". */
+const placed = computed(() => {
+  const seq = entrySeq.value ?? Infinity
+  const rows = entryList.value.map((e) => ({ ...e, isNew: false }))
+  const at = rows.findIndex((e) => e.seq > seq)
+  const row = { seq: entrySeq.value ?? 0, ace: pendingAce.value || '…', isNew: true }
+  if (at < 0) rows.push(row)
+  else rows.splice(at, 0, row)
+  return rows
+})
+/** An earlier entry that already matches everything the new one would. */
+const shadowedBy = computed(() =>
+  entrySeq.value === null ? null : shadowingEntry(entryList.value, pendingAce.value, entrySeq.value, entryStandard.value),
+)
+const veryBroad = computed(() => isVeryBroad(pendingAce.value, entryStandard.value))
+
+/** Destination port shortcuts; the number field takes any other port. */
+const portChips: [string, number | null][] = [
+  ['Any port', null],
+  ['SSH 22', 22],
+  ['DNS 53', 53],
+  ['HTTP 80', 80],
+  ['HTTPS 443', 443],
+  ['Console 8443', 8443],
+]
+const chipOn = (port: number | null) => {
+  const d = entryForm.value.dstPort
+  return port === null ? d.op === 'any' : d.op === 'eq' && d.port === port
+}
+function setDstPort(port: number | null) {
+  entryForm.value.dstPort = port === null ? { op: 'any', port: null, to: null } : { op: 'eq', port, to: null }
+}
 
 const protocolOptions: { label: string; value: AceProtocol }[] = [
   { label: 'IP (any protocol)', value: 'ip' },
@@ -277,10 +328,12 @@ const builtAce = computed(() => buildAce(entryForm.value, entryStandard.value))
 
 function openAddEntry(acl: number) {
   entryAcl.value = acl
-  entryForm.value = emptyAceForm()
+  entryForm.value = emptyAceForm(isStandard(acl))
   typeEntry.value = false
   entryAce.value = ''
-  entrySeq.value = null
+  entryPos.value = positions.value.at(-1)?.seq === null
+    ? ([...positions.value].reverse().find((o) => o.seq !== null)?.key ?? 'end')
+    : 'end'
   showAddEntry.value = true
 }
 
@@ -320,7 +373,12 @@ async function onAddEntry() {
       return
     }
   } else {
-    const errors = aceFormErrors(entryForm.value, entryStandard.value)
+    const f = entryForm.value
+    if (entryPorts.value && f.dstPort.op === 'eq' && f.dstPort.port === null) {
+      message.warning('Choose a destination port: one of the buttons, Any port, or a number')
+      return
+    }
+    const errors = aceFormErrors(f, entryStandard.value)
     if (errors.length) {
       message.warning(errors[0])
       return
@@ -328,9 +386,14 @@ async function onAddEntry() {
     ace = builtAce.value
   }
   const acl = entryAcl.value
+  const seq = entrySeq.value
+  if (seq === null) {
+    message.warning('Choose where the entry goes')
+    return
+  }
   submitting.value = true
   try {
-    await mutate(() => addAclEntry(acl, ace, entrySeq.value ?? undefined), `Entry added to list ${acl}`)
+    await mutate(() => addAclEntry(acl, ace, seq), `Entry added to list ${acl}`)
     showAddEntry.value = false
   } catch {
     // keep the dialog open, with what was entered
@@ -519,7 +582,7 @@ async function bind(iface: string, acl: number) {
         Config: if a change cuts off your access, restarting the device restores the saved configuration.
       </NAlert>
       <NEmpty v-if="!loading && config && !aclNumbers.length" description="No access lists yet" />
-      <NTabs v-else :value="selected ?? undefined" type="line" animated @update:value="(v: number) => (selected = v)">
+      <NTabs v-else :value="selected ?? undefined" type="line" animated @update:value="(v: number | string) => (selected = v as number | typeof POLICY_TAB)">
         <NTabPane v-for="acl in aclNumbers" :key="acl" :name="acl" :tab="String(acl)">
           <NSpace justify="space-between" align="center" class="gap">
             <span class="muted">
@@ -544,6 +607,9 @@ async function bind(iface: string, acl: number) {
             :row-key="(e: EntryRow) => e.seq"
             size="small"
           />
+        </NTabPane>
+        <NTabPane v-if="config" :name="POLICY_TAB" tab="Effective Policy">
+          <EffectivePolicy :config="config" />
         </NTabPane>
       </NTabs>
     </NCard>
@@ -584,10 +650,11 @@ async function bind(iface: string, acl: number) {
     v-model:show="showAddEntry"
     preset="card"
     :title="`Add Entry to List ${entryAcl} (${kindLabel(entryAcl).toLowerCase()})`"
-    style="width: 620px"
+    style="width: 1020px; max-width: calc(100vw - 32px)"
     :mask-closable="false"
   >
-    <NForm label-placement="left" label-width="110">
+    <div class="add-entry">
+    <NForm label-placement="left" label-width="110" class="add-form">
       <template v-if="!typeEntry">
         <NFormItem label="Action">
           <NRadioGroup v-model:value="entryForm.action">
@@ -626,7 +693,27 @@ async function bind(iface: string, acl: number) {
             <AceAddrInput v-model="entryForm.dst" />
           </NFormItem>
           <NFormItem v-if="entryPorts" label="Destination port">
-            <AcePortInput v-model="entryForm.dstPort" shortcuts />
+            <NSpace :size="6" align="center">
+              <NButton
+                v-for="[label, port] in portChips"
+                :key="label"
+                size="small"
+                :type="chipOn(port) ? 'primary' : 'default'"
+                :secondary="!chipOn(port)"
+                @click="setDstPort(port)"
+              >
+                {{ label }}
+              </NButton>
+              <NInputNumber
+                :value="entryForm.dstPort.op === 'eq' ? entryForm.dstPort.port : null"
+                :min="1" :max="65535"
+                :show-button="false"
+                size="small"
+                placeholder="Other port"
+                style="width: 110px"
+                @update:value="(p: number | null) => (entryForm.dstPort = { op: 'eq', port: p, to: null })"
+              />
+            </NSpace>
           </NFormItem>
           <NFormItem v-if="entryPorts" label="Match">
             <NRadioGroup v-model:value="entryForm.match">
@@ -658,16 +745,40 @@ async function bind(iface: string, acl: number) {
           </div>
         </div>
       </NFormItem>
-      <NFormItem label="Seq">
+      <NFormItem label="Position">
         <div class="field">
-          <NInputNumber v-model:value="entrySeq" :min="1" :max="65535" clearable placeholder="After the last entry" style="width: 100%" />
-          <div class="field-hint">1 to 65535; lower is checked first. Leave empty to add after the last entry.</div>
+          <NSelect v-model:value="entryPos" :options="positionSelect" />
+          <div class="field-hint">Entries are checked from the top; the first that matches decides.</div>
         </div>
       </NFormItem>
       <NFormItem v-if="!typeEntry" label="Entry">
         <code class="ace preview">{{ builtAce }}</code>
       </NFormItem>
     </NForm>
+
+    <div class="where">
+      <div class="where-title">Where it goes in list {{ entryAcl }}</div>
+      <ol class="where-list">
+        <li v-for="e in placed" :key="e.isNew ? 'new' : e.seq" :class="{ 'is-new': e.isNew }">
+          <span class="where-seq">{{ e.isNew ? (entrySeq ?? '–') : e.seq }}</span>
+          <code class="ace">{{ e.ace }}</code>
+          <NTag v-if="e.isNew" size="tiny" type="info">new</NTag>
+        </li>
+        <li class="implicit">
+          <span class="where-seq"></span>
+          <span>Anything else → {{ entryStandard ? 'go on to the extended list' : 'drop (implicit)' }}</span>
+        </li>
+      </ol>
+      <NAlert v-if="shadowedBy" type="warning" :bordered="false" title="This entry will never match" class="where-warn">
+        Entry {{ shadowedBy.seq }} (<code>{{ shadowedBy.ace }}</code>) comes first and already matches every packet this
+        one would. Put the new entry above it, or narrow entry {{ shadowedBy.seq }}.
+      </NAlert>
+      <NAlert v-if="veryBroad" type="warning" :bordered="false" title="Very broad" class="where-warn">
+        This permits all traffic from any source to any destination on every port. Entries after it never match, and
+        the implicit deny no longer applies.
+      </NAlert>
+    </div>
+    </div>
     <template #footer>
       <NSpace justify="space-between" align="center">
         <NSpace :size="8" align="center">
@@ -723,6 +834,53 @@ async function bind(iface: string, acl: number) {
   margin-top: 4px;
   font-size: 12px;
   color: #888;
+}
+.add-entry {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.add-form {
+  flex: 1 1 520px;
+  min-width: 0;
+}
+.where {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.where-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.where-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 13px;
+}
+.where-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+.where-list li.is-new {
+  background: rgba(32, 128, 240, 0.12);
+  box-shadow: inset 3px 0 0 #2080f0;
+}
+.where-list li.implicit {
+  font-style: italic;
+  color: #888;
+}
+.where-seq {
+  width: 44px;
+  flex: none;
+  color: #888;
+  text-align: right;
+}
+.where-warn {
+  margin-top: 8px;
 }
 .confirm p {
   margin: 0 0 8px;

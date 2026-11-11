@@ -45,14 +45,18 @@ export interface AceForm {
 export const emptyAddr = (): AddrField => ({ kind: 'any', value: '' })
 export const emptyPort = (): PortField => ({ op: 'any', port: null, to: null })
 
-export const emptyAceForm = (): AceForm => ({
-  action: 'permit',
+/**
+ * A new entry's starting point. A standard list only drops what it denies, so: Deny, one host. An
+ * extended one: Permit, TCP, to a destination port still to choose, so that OK needs a choice.
+ */
+export const emptyAceForm = (standard = false): AceForm => ({
+  action: standard ? 'deny' : 'permit',
   protocol: 'tcp',
   protoNumber: null,
-  src: emptyAddr(),
+  src: standard ? { kind: 'host', value: '' } : emptyAddr(),
   srcPort: emptyPort(),
   dst: emptyAddr(),
-  dstPort: emptyPort(),
+  dstPort: standard ? emptyPort() : { op: 'eq', port: null, to: null },
   match: 'all',
 })
 
@@ -242,4 +246,132 @@ export function parseAce(ace: string, standard: boolean): AceView | null {
   if (options) end++
   if (end !== words.length) return null
   return { action, protocol, source: src[0] + sp, destination: dst[0] + dp, options }
+}
+
+// ---------- the device's entries, as values to match packets against ----------
+
+/** An IPv4 network: `net` with its host bits clear, as an unsigned 32-bit number. Prefix 0 is "any". */
+export interface Net {
+  net: number
+  prefix: number
+}
+
+/** Ports `min` to `max`, inclusive. */
+export interface PortRange {
+  min: number
+  max: number
+}
+
+/** An entry, read the way mini-fw compiles it (struct mfw_rule). */
+export interface AceRule {
+  action: AceAction
+  /** IP protocol number; 0 for "ip", any protocol. Always 0 in a standard list. */
+  proto: number
+  src: Net
+  /** null: any port. Only TCP and UDP entries have ports. */
+  sport: PortRange | null
+  dst: Net
+  dport: PortRange | null
+  /** TCP with ACK or RST set. */
+  established: boolean
+  /** A reply to a connection this device opened (TCP or UDP). */
+  reply: boolean
+}
+
+export const PROTO_NUMBERS: Record<string, number> = { ip: 0, icmp: 1, tcp: 6, udp: 17 }
+
+export const ANY_NET: Net = { net: 0, prefix: 0 }
+
+export { ipToInt, intToIp, prefixMask }
+
+/** Whether address `ip` is in `n`. */
+export const inNet = (ip: number, n: Net) => ((ip & prefixMask(n.prefix)) >>> 0) === n.net
+
+/** Whether network `outer` contains all of `inner`. */
+export const netContains = (outer: Net, inner: Net) => outer.prefix <= inner.prefix && inNet(inner.net, outer)
+
+export const netText = (n: Net) => (n.prefix === 0 ? 'any' : n.prefix === 32 ? intToIp(n.net) : `${intToIp(n.net)}/${n.prefix}`)
+
+/** Reads an address at `words[i]` as acl_parse.c does; returns it and the index after it, or null. */
+function readNet(words: string[], i: number): [Net, number] | null {
+  const w = words[i]
+  if (w === undefined) return null
+  if (w === 'any') return [ANY_NET, i + 1]
+  if (w === 'host') {
+    const ip = ipToInt(words[i + 1] ?? '')
+    return ip === null ? null : [{ net: ip, prefix: 32 }, i + 2]
+  }
+  if (w.includes('/')) {
+    const [a, len] = w.split('/')
+    const ip = ipToInt(a)
+    const prefix = Number(len)
+    if (ip === null || !/^\d{1,2}$/.test(len) || prefix > 32) return null
+    return [{ net: (ip & prefixMask(prefix)) >>> 0, prefix }, i + 1]
+  }
+  const ip = ipToInt(w)
+  const wc = ipToInt(words[i + 1] ?? '')
+  if (ip === null || wc === null) return null
+  const hostBits = 32 - Math.clz32(wc)
+  // contiguous: 0..01..1
+  if (wc !== (hostBits === 32 ? 0xffffffff : ((1 << hostBits) >>> 0) - 1)) return null
+  const prefix = 32 - hostBits
+  return [{ net: (ip & prefixMask(prefix)) >>> 0, prefix }, i + 2]
+}
+
+/** Reads an optional port at `words[i]` as parse_port() does; undefined if it is malformed. */
+function readPorts(words: string[], i: number): [PortRange | null, number] | undefined {
+  const num = (s: string | undefined) => (s !== undefined && /^\d+$/.test(s) && +s >= 1 && +s <= 65535 ? +s : null)
+  const op = words[i]
+  const a = num(words[i + 1])
+  switch (op) {
+    case 'eq':
+      return a === null ? undefined : [{ min: a, max: a }, i + 2]
+    case 'gt':
+      return a === null || a === 65535 ? undefined : [{ min: a + 1, max: 65535 }, i + 2]
+    case 'lt':
+      return a === null || a === 1 ? undefined : [{ min: 1, max: a - 1 }, i + 2]
+    case 'range': {
+      const b = num(words[i + 2])
+      return a === null || b === null || a > b ? undefined : [{ min: a, max: b }, i + 3]
+    }
+    default:
+      return [null, i]
+  }
+}
+
+/** An entry in the device's syntax as values; null if it isn't one mini-fw would accept. */
+export function parseAceRule(ace: string, standard: boolean): AceRule | null {
+  const words = ace.trim().split(/\s+/)
+  const action = words[0]
+  if (action !== 'permit' && action !== 'deny') return null
+  const base = { action, sport: null, dport: null, established: false, reply: false } as const
+  if (standard) {
+    const src = readNet(words, 1)
+    if (!src || src[1] !== words.length) return null
+    return { ...base, proto: 0, src: src[0], dst: ANY_NET }
+  }
+  const p = words[1]
+  const proto = p === undefined ? undefined : p in PROTO_NUMBERS ? PROTO_NUMBERS[p] : /^\d{1,3}$/.test(p) && +p <= 255 ? +p : undefined
+  if (proto === undefined) return null
+  const ports = proto === 6 || proto === 17
+  const src = readNet(words, 2)
+  if (!src) return null
+  const sp = readPorts(words, src[1])
+  if (!sp || (sp[0] && !ports)) return null
+  const dst = readNet(words, sp[1])
+  if (!dst) return null
+  const dp = readPorts(words, dst[1])
+  if (!dp || (dp[0] && !ports)) return null
+  let end = dp[1]
+  let established = false
+  let reply = false
+  if (words[end] === 'established' && proto === 6) {
+    established = true
+    end++
+  } else if (words[end] === 'reply' && ports) {
+    reply = true
+    end++
+  }
+  if (end !== words.length) return null
+  return { ...base, proto, src: src[0], sport: sp[0], dst: dst[0], dport: dp[0], established, reply }
 }

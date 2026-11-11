@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // An access list entry's source or destination port (TCP and UDP only): any, one port, a range,
-// or above or below a port. `shortcuts` adds buttons for common services.
-import { NButton, NInputNumber, NSelect, NSpace } from 'naive-ui'
+// or above or below a port.
+import { NInputNumber, NSelect, NSpace } from 'naive-ui'
 import type { PortField, PortOp } from '../ace'
 
 const model = defineModel<PortField>({ required: true })
-defineProps<{ shortcuts?: boolean }>()
 
 const opOptions: { label: string; value: PortOp }[] = [
   { label: 'Any port', value: 'any' },
@@ -13,13 +12,6 @@ const opOptions: { label: string; value: PortOp }[] = [
   { label: 'Range', value: 'range' },
   { label: 'Greater than', value: 'gt' },
   { label: 'Less than', value: 'lt' },
-]
-
-const services: [string, number][] = [
-  ['SSH', 22],
-  ['DNS', 53],
-  ['HTTP', 80],
-  ['HTTPS', 443],
 ]
 
 const set = (patch: Partial<PortField>) => (model.value = { ...model.value, ...patch })
@@ -58,17 +50,6 @@ const set = (patch: Partial<PortField>) => (model.value = { ...model.value, ...p
           />
         </template>
       </template>
-    </NSpace>
-    <NSpace v-if="shortcuts" :size="4">
-      <NButton
-        v-for="[name, port] in services"
-        :key="name"
-        size="tiny"
-        secondary
-        @click="set({ op: 'eq', port, to: null })"
-      >
-        {{ name }} {{ port }}
-      </NButton>
     </NSpace>
   </NSpace>
 </template>

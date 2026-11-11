@@ -76,24 +76,48 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 
 ### Access Lists
 
-- Each list has a tab with its number. Above the entries: whether it is standard or extended, and the interfaces that apply it.
+- Each list has a tab with its number. Above the entries: whether it is standard or extended, and the interfaces that apply it. The last tab, "Effective Policy", shows what an interface does with all its lists together (below).
 - Columns: Seq, Action (Permit or Deny), Source, and for an extended list also Protocol, Destination and Options; then Actions. A network is shown as `198.51.100.0/24`, and a port after its address, for example "Any, port 22". An entry the page can't split into columns is shown as its Cisco text.
-- Add an entry: open the list's tab, click "Add Entry", fill in the form, and click "OK":
+- Add an entry: open the list's tab, click "Add Entry", fill in the form, and click "OK". A new entry in a standard list starts as Deny, one Host; in an extended list as Permit, TCP, with the destination port still to choose:
   - Action: Permit or Deny.
   - Protocol (extended lists only): IP (any protocol), TCP, UDP, ICMP, or Other, by protocol number 0 to 255.
   - Source, and Destination (extended lists only): Any; Host, one address such as `192.168.1.10`; or Network, an address and prefix length such as `192.168.1.0/24`. The network address must have no host bits set: `192.168.1.0/24`, not `192.168.1.5/24`.
-  - Source port and Destination port (TCP and UDP only): Any port, Equal to, Range, Greater than or Less than, with port numbers 1 to 65535. The SSH 22, DNS 53, HTTP 80 and HTTPS 443 buttons fill in the destination port. The destination port is the service being reached; the source port is usually left as Any port.
+  - Destination port (TCP and UDP only): the service being reached. Click Any port, SSH 22, DNS 53, HTTP 80, HTTPS 443 or Console 8443, or type another port in "Other port". "OK" asks for one until you choose. For a port range, use "Type the entry".
+  - Source port (TCP and UDP only): usually Any port; also Equal to, Range, Greater than or Less than, with port numbers 1 to 65535.
   - Match (TCP and UDP only): All packets; Established connections only (TCP: packets with ACK or RST, so replies to connections already open); or Replies to connections this device opened.
-  - Seq: optional. Leave it empty to add the entry after the last one (its Seq + 10). A Seq the list already has is refused.
+  - Position: where the entry goes, since the first entry that matches decides. "At the top", "After seq A, before B" for each gap, or "At the end" (the default). Each choice shows the Seq the entry gets: half the first Seq at the top, halfway between A and B, the last Seq + 10 at the end. A gap with no free number (B is A + 1) can't be chosen.
   - "Entry" at the bottom shows the line the form builds, in the device's syntax.
+- Next to the form, "Where it goes in list N" shows the list with the new entry in place, highlighted, and what happens to anything no entry matches. Two warnings may show there:
+  - "This entry will never match": an earlier entry already matches every packet the new one would (same or any protocol, its addresses and ports include the new one's). Put the new entry above it, or change the earlier one.
+  - "Very broad": a permit from any source to any destination on every port. Nothing after it in the list is ever reached.
 - To type the entry in Cisco syntax instead, turn on "Type the entry" at the bottom left of the dialog. It starts from what the form has built.
   - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network such as `198.51.100.0/24` (a wildcard mask, `198.51.100.0 0.0.0.255`, works too).
   - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`.
-- There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, give it a Seq between theirs (for example 15 between 10 and 20).
+- There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, choose that gap in "Position".
 - Delete an entry: click "Delete" on its row and confirm. If the list is an extended list in force on an interface, the confirmation warns that removing a permit entry can cut off traffic, including this console.
 - If someone else changed the access lists (another administrator, or the command line) since the page showed them, a delete is not made: the page shows the lists as they are now and says so. Check the entry and delete it again.
 - Delete a list: click "Delete List" on its tab and confirm. A list that an interface applies can't be deleted; remove it from the interface first.
 - If the device refuses a change, its reason is shown as it is, for example "access list 100 already has sequence 10" or "access list 100 is applied to eth0; remove it there first".
+
+### Effective Policy
+
+The "Effective Policy" tab (after the list tabs) shows, for one interface, every entry a packet arriving on it can meet, in the order it meets them. Choose the interface at the top. Read only.
+
+- Stage 1 · Standard list N: the interface's standard list, if it applies one. Deny → Drop. Permit → Go on to stage 2. "Anything else → Go on to stage 2". A permit marked "No effect" changes nothing, since the standard list already lets on what it doesn't deny; a permit before a deny that overlaps it is marked "Exempts these sources from the deny entries after it".
+- Stage 2 · Extended list N: the interface's extended list, if any. Permit → Pass, Deny → Drop, and "Anything else → Drop (implicit)". If the interface applies no extended list, everything that gets past stage 1 passes.
+- Columns: #, Seq, Protocol, Source, Destination, Result.
+- Outgoing traffic isn't filtered. Non-first IPv4 fragments skip stage 2, and traffic that isn't IPv4 always passes.
+
+### Test a packet
+
+Above the Effective Policy table, click "Test a packet" to open it (it stays open or closed the next time, in this browser).
+
+- Describe a packet: Protocol (TCP, UDP, ICMP, or Other by number), Source address, Destination address, and for TCP and UDP the ports and the kind of packet: New connection (SYN), Established (ACK or RST set; TCP only), or Reply to a connection this device opened.
+- "Fill in" buttons prefill fields: This console (TCP to this console's address and port), SSH, HTTPS, DNS, Ping. Every field stays editable.
+- The result updates as you type: "Passed" or "Dropped", and the path, for example "Stage 1: no deny matches 203.0.113.9. Stage 2: entry 20 of list 100 (deny tcp any any eq 22) matches." The deciding row is highlighted in the table, green for pass and red for drop.
+- A red field isn't a valid address. Until every needed field is filled in, it says "Incomplete" and what to enter.
+- A blank source port matches only entries without a source port; the result says when that is why an entry didn't match.
+- The console works this out from the lists as shown, the way the device matches packets; the device itself isn't asked. Use it to check a change before relying on it.
 
 ### Interfaces
 
@@ -107,11 +131,12 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 
 - Allow SSH only from the office network `192.168.1.0/24`, on eth0:
   1. Click "New List", enter 100 and click "OK".
-  2. On tab 100, click "Add Entry": Action Permit, Protocol TCP, Source Network `192.168.1.0/24`, Destination Any, Destination port SSH 22. Click "OK".
+  2. On tab 100, click "Add Entry": Action Permit, Protocol TCP, Source Network `192.168.1.0/24`, Destination Any, Destination port SSH 22, Position At the end. Click "OK".
   3. Add Entry: Action Deny, Protocol TCP, Source Any, Destination Any, Destination port SSH 22.
-  4. Add Entry: Action Permit, Protocol IP (any protocol), Source Any, Destination Any, so other traffic still passes.
+  4. Add Entry: Action Permit, Protocol IP (any protocol), Source Any, Destination Any, so other traffic still passes. It shows "Very broad": expected here, as the last entry.
   5. In Interfaces, click "Apply List", enter `eth0`, choose 100, and click "OK".
-  6. Click "Save Config".
+  6. Check it on the Effective Policy tab: choose eth0, open "Test a packet", click SSH, and enter a source outside `192.168.1.0/24` and a destination address of the device: it should say Dropped, by entry 20 of list 100.
+  7. Click "Save Config".
 - Block one malicious host on eth0 with a standard list: create list 10, add an entry with Action Deny and Source Host `203.0.113.66`, apply list 10 to eth0, and click "Save Config". Other traffic still goes through, since a standard list only drops what it denies.
 
 ## Saving the configuration
