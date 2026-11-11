@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ipToInt, parseAddrLines, parseAddress, parseAceRule, stdAce } from './ace'
 import {
-  KEY_IMPLICIT_DENY, KEY_NO_EXT, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
+  EXT_MAX_ENTRIES, KEY_IMPLICIT_DENY, KEY_NO_EXT, STD_MAX_ENTRIES, limitError, listFill, parseLimitRefusal, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
   nextFreeList, permitsTcpPort, placeEntries, policyRows, positionAfter, positionOptions, shadowingEntry,
   type Packet,
 } from './policy'
@@ -265,5 +265,36 @@ describe('shadowing and broad entries', () => {
     expect(isVeryBroad('permit tcp any any eq 22', false)).toBe(false)
     expect(isVeryBroad('deny ip any any', false)).toBe(false)
     expect(isVeryBroad('permit any', true)).toBe(false)
+  })
+})
+
+describe('entry limits', () => {
+  it('uses mini-fw limits: 64 standard, 128 extended', () => {
+    expect(STD_MAX_ENTRIES).toBe(64)
+    expect(EXT_MAX_ENTRIES).toBe(128)
+    expect(listFill(10, 3)).toEqual({ count: 3, max: 64, room: 61, over: false, nearFull: false })
+    expect(listFill(100, 128)).toMatchObject({ max: 128, room: 0, over: false, nearFull: true })
+  })
+
+  it('is amber from 90% full', () => {
+    expect(listFill(10, 57).nearFull).toBe(false) // 57.6 is 90% of 64
+    expect(listFill(10, 58).nearFull).toBe(true)
+    expect(listFill(100, 115).nearFull).toBe(false) // 115.2 is 90% of 128
+    expect(listFill(100, 116).nearFull).toBe(true)
+    expect(listFill(10, 65)).toMatchObject({ over: true, room: 0 })
+  })
+
+  it('refuses a change that would go over, and only then', () => {
+    expect(limitError(10, 63, 64)).toBeNull()
+    expect(limitError(10, 64, 65)).toBe('List 10 can hold at most 64 entries; it has 64. Remove some first.')
+    expect(limitError(100, 120, 130)).toBe('List 100 can hold at most 128 entries; it has 120. Remove some first.')
+  })
+
+  it("reads mfwd's refusal for a list over the limit", () => {
+    expect(parseLimitRefusal('line 3: extended list 100 has 131 ACEs; at most 128 can be bound')).toEqual({
+      acl: 100, count: 131, max: 128, remove: 3,
+    })
+    expect(parseLimitRefusal('standard list 7 has 70 ACEs; at most 64 can be bound')?.remove).toBe(6)
+    expect(parseLimitRefusal('rule table full')).toBeNull()
   })
 })

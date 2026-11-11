@@ -5,7 +5,7 @@ import { NAlert, NButton, NTag } from 'naive-ui'
 import PolicyTable from './PolicyTable.vue'
 import TestPacket from './TestPacket.vue'
 import { STATUS_LABEL, STATUS_TYPE, useAclPage } from '../aclPage'
-import type { Verdict } from '../policy'
+import { parseLimitRefusal, type Verdict } from '../policy'
 import { deleteInterface } from '../api'
 
 const props = defineProps<{ iface: string }>()
@@ -14,6 +14,8 @@ const page = useAclPage()
 const status = computed(() => page.ifaceStatus(props.iface))
 const engine = computed(() => page.engine.value)
 const verdict = ref<Verdict | null>(null)
+/** mfwd refused the policy because a list has too many entries: which, and how many to remove. */
+const limitRefusal = computed(() => (engine.value?.state === 'refused' && engine.value.error ? parseLimitRefusal(engine.value.error) : null))
 const hasLists = computed(() => !!page.config.value?.interfaces[props.iface]?.acls_in.length)
 
 const statusText = computed(() => {
@@ -62,6 +64,11 @@ async function forget() {
   </div>
   <NAlert v-if="status === 'refused' && engine?.error" type="error" :bordered="false" class="gap">
     {{ engine.error }}
+    <div v-if="limitRefusal" class="limit">
+      List {{ limitRefusal.acl }} has {{ limitRefusal.count }} entries and can hold at most {{ limitRefusal.max }}:
+      remove {{ limitRefusal.remove }} {{ limitRefusal.remove === 1 ? 'entry' : 'entries' }} from it. Until then the device
+      keeps running the previous lists, and no access list change takes effect.
+    </div>
   </NAlert>
   <p v-if="page.engineError.value && engine" class="muted small">Last refresh failed: {{ page.engineError.value }}</p>
 
@@ -76,8 +83,8 @@ async function forget() {
   <PolicyTable :iface="iface" :verdict="verdict" />
 
   <p class="muted small foot">
-    Only incoming traffic is filtered; outgoing traffic isn't. Non-first IPv4 fragments skip stage 2, and traffic
-    that isn't IPv4 (ARP, IPv6) always passes. Changes take effect at once; Save Config keeps them. If a change cuts
+    Only incoming traffic is filtered; outgoing traffic isn't. Non-first IPv4 fragments skip stage 2, and the
+    device may be set to drop IPv4 fragments altogether. Traffic that isn't IPv4 (ARP, IPv6) always passes. Changes take effect at once; Save Config keeps them. If a change cuts
     off your access, restarting the device restores the saved configuration.
   </p>
   <p v-if="!hasLists" class="small">
@@ -125,6 +132,10 @@ async function forget() {
 }
 .gap {
   margin-bottom: 12px;
+}
+.limit {
+  margin-top: 6px;
+  font-weight: 600;
 }
 .foot {
   margin: 8px 0 0;

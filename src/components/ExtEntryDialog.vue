@@ -10,7 +10,7 @@ import AcePortInput from './AcePortInput.vue'
 import {
   NAMED_PROTOCOLS, aceFormErrors, buildAce, emptyAceForm, hasPorts, type AceForm, type AceProtocol,
 } from '../ace'
-import { NO_ROOM, isVeryBroad, permitsTcpPort, placeEntries, positionOptions, shadowingEntry } from '../policy'
+import { NO_ROOM, isVeryBroad, limitError, permitsTcpPort, placeEntries, positionOptions, shadowingEntry } from '../policy'
 import { addAclEntry } from '../api'
 import { CONSOLE_PORT, consoleWarning, sharedNote, useAclPage, type EntryRequest } from '../aclPage'
 
@@ -45,6 +45,9 @@ const seq = computed(() => positions.value.find((o) => o.key === pos.value)?.seq
 const placed = computed(() => placeEntries(entries.value, [{ seq: seq.value ?? Infinity, ace: ace.value || '…' }]))
 
 // ---------- warnings ----------
+
+/** mini-fw binds at most 128 extended entries: over it, nothing can be added. */
+const limitErr = computed(() => limitError(acl, entries.value.length, entries.value.length + 1))
 
 const shadowedBy = computed(() => (seq.value === null ? null : shadowingEntry(entries.value, ace.value, seq.value, false)))
 const veryBroad = computed(() => isVeryBroad(ace.value, false))
@@ -129,6 +132,10 @@ async function onAdd() {
       page.message.warning(errors[0])
       return
     }
+  }
+  if (limitErr.value) {
+    page.message.warning(limitErr.value)
+    return
   }
   if (seq.value === null) {
     page.message.warning(NO_ROOM)
@@ -251,6 +258,7 @@ async function onAdd() {
             <span>Anything else → drop (implicit)</span>
           </li>
         </ol>
+        <NAlert v-if="limitErr" type="error" :bordered="false" title="List full" class="warn">{{ limitErr }}</NAlert>
         <NAlert v-if="shadowedBy" type="warning" :bordered="false" title="Never matches" class="warn">
           Entry {{ shadowedBy.seq }} (<code>{{ shadowedBy.ace }}</code>) comes first and already matches every packet this
           one would. Choose a position above it, or narrow entry {{ shadowedBy.seq }}.
@@ -272,7 +280,7 @@ async function onAdd() {
         </NSpace>
         <NSpace>
           <NButton @click="emit('close')">Cancel</NButton>
-          <NButton type="primary" :loading="submitting" @click="onAdd">Add Entry</NButton>
+          <NButton type="primary" :loading="submitting" :disabled="!!limitErr" @click="onAdd">Add Entry</NButton>
         </NSpace>
       </NSpace>
     </template>

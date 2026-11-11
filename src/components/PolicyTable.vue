@@ -3,7 +3,7 @@
 // a packet arriving on it can meet, in the order it meets them, with the actions on each.
 import { computed, ref, watch } from 'vue'
 import { NButton, NSpace, NTable } from 'naive-ui'
-import { policyRows, positionAfter, type PolicyRow, type Verdict } from '../policy'
+import { listFill, policyRows, positionAfter, type PolicyRow, type Verdict } from '../policy'
 import { sharedNote, useAclPage } from '../aclPage'
 
 const props = defineProps<{ iface: string; verdict: Verdict | null }>()
@@ -53,6 +53,7 @@ function changeList(stage: 1 | 2, acl: number) {
 }
 
 const also = (acl: number) => page.alsoOn(acl, props.iface)
+const fill = (acl: number) => listFill(acl, page.entriesOf(acl).length)
 </script>
 
 <template>
@@ -71,7 +72,12 @@ const also = (acl: number) => page.alsoOn(acl, props.iface)
       <template v-for="r in rows" :key="r.key">
         <tr v-if="r.kind === 'stage'" class="stage" :class="hitClass(r.key)">
           <td colspan="5">
-            <div class="stage-title">{{ r.text }}</div>
+            <div class="stage-title">
+              {{ r.text }}
+              <span v-if="r.acl !== null" class="fill" :class="{ near: fill(r.acl).nearFull }">
+                · {{ fill(r.acl).count }} of {{ fill(r.acl).max }} entries
+              </span>
+            </div>
             <div v-if="r.acl !== null && also(r.acl).length" class="note">{{ sharedNote(also(r.acl)) }}</div>
           </td>
           <td>
@@ -152,6 +158,15 @@ const also = (acl: number) => page.alsoOn(acl, props.iface)
 .note {
   font-size: 12px;
   color: #888;
+}
+.fill {
+  font-weight: normal;
+  font-size: 12px;
+  color: #888;
+}
+.fill.near {
+  color: #f0a020;
+  font-weight: 600;
 }
 .note.warn {
   color: #f0a020;

@@ -400,3 +400,43 @@ export function nextFreeList(config: Config, standard: boolean): number | null {
   for (let n = lo; n <= hi; n++) if (!taken(n)) return n
   return null
 }
+
+// ---------- how many entries a list can hold ----------
+
+// mini-fw binds at most this many entries per list (include/mfw.h:24-25, MFW_MAX_STD_ACES and
+// MFW_MAX_EXT_ACES). Over that, mfwd refuses the WHOLE policy (src/policy.c, "standard list N has k
+// ACEs; at most 64 can be bound") and keeps running the previous one, so every later change stops
+// taking effect until the list is trimmed. Only bound lists are counted, but any list can be applied.
+export const STD_MAX_ENTRIES = 64
+export const EXT_MAX_ENTRIES = 128
+
+export const maxEntries = (acl: number) => (isStandard(acl) ? STD_MAX_ENTRIES : EXT_MAX_ENTRIES)
+
+export interface ListFill {
+  count: number
+  max: number
+  /** How many more fit; 0 when full or over. */
+  room: number
+  over: boolean
+  /** 90% full or more: shown amber. */
+  nearFull: boolean
+}
+
+export function listFill(acl: number, count: number): ListFill {
+  const max = maxEntries(acl)
+  return { count, max, room: Math.max(0, max - count), over: count > max, nearFull: count >= max * 0.9 }
+}
+
+/** The error for a change that would leave `after` entries in a list that has `now`; null if they fit. */
+export function limitError(acl: number, now: number, after: number): string | null {
+  const max = maxEntries(acl)
+  return after > max ? `List ${acl} can hold at most ${max} entries; it has ${now}. Remove some first.` : null
+}
+
+/** mfwd's refusal for a list over its limit, read from engine.error; null if the error is another. */
+export function parseLimitRefusal(error: string): { acl: number; count: number; max: number; remove: number } | null {
+  const m = /(?:standard|extended) list (\d+) has (\d+) ACEs; at most (\d+) can be bound/.exec(error)
+  if (!m) return null
+  const [acl, count, max] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  return { acl, count, max, remove: count - max }
+}

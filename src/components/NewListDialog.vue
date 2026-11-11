@@ -5,7 +5,7 @@ import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NForm, NFormItem, NInput, NInputNumber, NModal, NRadio, NRadioGroup, NSpace } from 'naive-ui'
 import AddressLines from './AddressLines.vue'
 import { parseAddrLines, parseAddress, sameNet, stdAce, type Net } from '../ace'
-import { EXT_RANGE, STD_RANGE, isStandard, nextFreeList, permitsTcpPort } from '../policy'
+import { EXT_RANGE, STD_MAX_ENTRIES, STD_RANGE, isStandard, nextFreeList, permitsTcpPort } from '../policy'
 import { addAclEntry, createAcl } from '../api'
 import { CONSOLE_PORT, useAclPage } from '../aclPage'
 import type { AclEntry } from '../types'
@@ -90,6 +90,14 @@ const entries = computed<AclEntry[]>(() => {
   return []
 })
 
+/** "Addresses to deny" over a standard list's limit (mini-fw binds at most 64). Copies can't exceed it. */
+const limitErr = computed(() => {
+  const k = entries.value.length
+  return start.value === 'addresses' && k > STD_MAX_ENTRIES
+    ? `List ${number.value ?? ''} can hold at most ${STD_MAX_ENTRIES} entries; these lines make ${k}. Remove ${k - STD_MAX_ENTRIES}.`
+    : null
+})
+
 const emptyExt = computed(() => !standard.value && !entries.value.length)
 const copyNoConsole = computed(
   () => !standard.value && start.value.startsWith('copy-') && entries.value.length > 0 && !permitsTcpPort(entries.value, CONSOLE_PORT),
@@ -101,6 +109,7 @@ const submitting = ref(false)
 const problem = computed(() => {
   if (numberError.value) return numberError.value
   if (start.value === 'addresses' && addrs.value.errors.length) return 'Fix the lines marked in red'
+  if (limitErr.value) return limitErr.value
   if (mgmtError.value) return mgmtError.value
   return null
 })
@@ -210,6 +219,7 @@ async function onCreate() {
             <span>{{ standard ? 'Anything else goes on to stage 2' : 'Anything else → drop (implicit)' }}</span>
           </li>
         </ol>
+        <NAlert v-if="limitErr" type="error" :bordered="false" title="Too many entries" class="warn">{{ limitErr }}</NAlert>
         <NAlert v-if="emptyExt" type="error" :bordered="false" title="Drops everything once applied" class="warn">
           An empty extended list drops all incoming traffic on the interface it is applied to, this console's connection
           included. Add entries before applying it.
@@ -224,7 +234,7 @@ async function onCreate() {
     <template #footer>
       <NSpace justify="end">
         <NButton @click="emit('close')">Cancel</NButton>
-        <NButton type="primary" :loading="submitting" @click="onCreate">
+        <NButton type="primary" :loading="submitting" :disabled="!!limitErr" @click="onCreate">
           {{ entries.length ? `Create list with ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}` : 'Create list' }}
         </NButton>
       </NSpace>

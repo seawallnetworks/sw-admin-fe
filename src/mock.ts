@@ -224,7 +224,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     mock.counters.xdp_drop += rand(0, 200)
     return {
       ...base,
-      ...(state === 'refused' ? { error: 'access list 100, entry 30: rule table full (mfwd: E2BIG)' } : {}),
+      ...(state === 'refused' ? { error: 'extended list 100 has 131 ACEs; at most 128 can be bound' } : {}),
       ...(state === 'applied' ? { config_generation: mock.generation, mfwd_generation: mock.generation + 3 } : {}),
       live: true,
       attached: names.filter(exists),

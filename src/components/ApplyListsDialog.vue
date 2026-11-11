@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import {
   NAlert, NAutoComplete, NButton, NForm, NFormItem, NInputNumber, NModal, NRadio, NRadioGroup, NSpace,
 } from 'naive-ui'
-import { boundLists, isStandard, nextFreeList, permitsTcpPort, EXT_RANGE, STD_RANGE } from '../policy'
+import { boundLists, isStandard, listFill, nextFreeList, permitsTcpPort, EXT_RANGE, STD_RANGE } from '../policy'
 import { parseAceRule } from '../ace'
 import { createAcl } from '../api'
 import { CONSOLE_PORT, consoleWarning, useAclPage, type ApplyRequest, type StageChoice } from '../aclPage'
@@ -87,6 +87,17 @@ const chosenStd = computed(() => (std.value === 'none' ? null : std.value === 'n
 const chosenExt = computed(() => (ext.value === 'none' ? null : ext.value === 'new' ? newExt.value : ext.value))
 const extEntries = computed(() => (ext.value === 'new' || chosenExt.value === null ? [] : page.entriesOf(chosenExt.value)))
 
+/**
+ * Chosen lists over mini-fw's limit (64 standard, 128 extended entries): applied, mfwd would refuse
+ * the whole policy and keep running the previous one.
+ */
+const overLimit = computed(() =>
+  [std.value, ext.value]
+    .filter((c): c is number => typeof c === 'number')
+    .map((a) => ({ acl: a, fill: listFill(a, page.entriesOf(a).length) }))
+    .filter((x) => x.fill.over),
+)
+
 // ---------- what it does ----------
 
 const stage1Sentence = computed(() => {
@@ -124,6 +135,10 @@ const problem = computed(() => {
   if (nameError.value) return nameError.value
   if (newStdError.value) return newStdError.value
   if (newExtError.value) return newExtError.value
+  if (overLimit.value.length) {
+    const { acl, fill } = overLimit.value[0]
+    return `List ${acl} can hold at most ${fill.max} entries; it has ${fill.count}. Remove some first.`
+  }
   if (nothing.value) return 'Choose a list for at least one stage'
   if (unchanged.value) return `${name.value} already applies these lists`
   return null
@@ -239,6 +254,10 @@ async function onApply() {
       <p>{{ stage2Sentence }}</p>
     </div>
 
+    <NAlert v-for="o in overLimit" :key="o.acl" type="error" :bordered="false" title="List too long" class="warn">
+      List {{ o.acl }} can hold at most {{ o.fill.max }} entries; it has {{ o.fill.count }}. Applied, the device would
+      refuse the whole configuration and keep running the previous one. Remove {{ o.fill.count - o.fill.max }} first.
+    </NAlert>
     <NAlert v-if="emptyExt" type="error" :bordered="false" title="Everything will be dropped" class="warn">
       List {{ chosenExt }} {{ ext === 'new' ? 'will be new and empty' : 'has no entries' }}. An extended list drops what it
       doesn't permit, so {{ name || 'the interface' }} will drop ALL incoming traffic, this console's connection included
@@ -265,7 +284,7 @@ async function onApply() {
     <template #footer>
       <NSpace justify="end">
         <NButton @click="emit('close')">Cancel</NButton>
-        <NButton :type="emptyExt ? 'error' : 'primary'" :loading="submitting" @click="onApply">
+        <NButton :type="emptyExt ? 'error' : 'primary'" :loading="submitting" :disabled="overLimit.length > 0" @click="onApply">
           {{ emptyExt ? 'Apply anyway' : 'Apply' }}
         </NButton>
       </NSpace>

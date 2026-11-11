@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // Add Entry for a standard list (stage 1): deny or permit one or several sources.
 import { computed, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import {
   NAlert, NButton, NForm, NFormItem, NInput, NModal, NRadioButton, NRadioGroup, NSelect, NSpace, NTag,
 } from 'naive-ui'
 import AddressLines from './AddressLines.vue'
 import { ANY_NET, intToIp, netText, parseAddrLines, parseAddress, sameNet, stdAce, parseAceRule, type Net } from '../ace'
 import {
-  NO_ROOM, defaultStdPosition, placeEntries, positionOptions, shadowingEntry, stdPermitHasEffect,
+  NO_ROOM, defaultStdPosition, limitError, listFill, placeEntries, positionOptions, shadowingEntry, stdPermitHasEffect,
 } from '../policy'
 import { addAclEntry } from '../api'
 import { sharedNote, useAclPage, type EntryRequest } from '../aclPage'
@@ -65,6 +66,12 @@ const sources = computed<{ nets: { net: Net; text: string }[]; skipped: number; 
 })
 const count = computed(() => sources.value.nets.length)
 
+/** The list's limit (mini-fw binds at most 64 standard entries): over it, nothing can be added. */
+const room = computed(() => listFill(acl, entries.value.length).room)
+const limitErr = computed(() =>
+  count.value ? limitError(acl, entries.value.length, entries.value.length + count.value) : null,
+)
+
 // ---------- where they go ----------
 
 const positions = computed(() => positionOptions(entries.value, Math.max(1, count.value)))
@@ -102,6 +109,7 @@ const wide = computed(() => newEntries.value.filter((e) => e.net.prefix > 0 && e
 const submitting = ref(false)
 const problem = computed(() => {
   if (srcKind.value === 'several' && sources.value.errors) return 'Fix the lines marked in red'
+  if (limitErr.value) return limitErr.value
   if (!count.value) {
     if (srcKind.value === 'several' && sources.value.skipped) return 'Every address is already in the list'
     return singleError.value ?? 'Enter the source'
@@ -148,6 +156,9 @@ const ipText = (n: Net) => intToIp(n.net)
 <template>
   <NModal :show="true" preset="card" :title="title" style="width: 1020px; max-width: calc(100vw - 32px)" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
     <NAlert v-if="also.length" type="info" :bordered="false" class="shared">{{ sharedNote(also) }}</NAlert>
+    <p class="intro muted">
+      To block attack traffic automatically, use <RouterLink to="/ddos">DDoS Protection</RouterLink>.
+    </p>
     <div class="layout">
       <NForm label-placement="left" label-width="90" class="form">
         <NFormItem label="Action">
@@ -183,6 +194,9 @@ const ipText = (n: Net) => intToIp(n.net)
             </div>
             <div v-else-if="srcKind === 'several'" style="margin-top: 6px">
               <AddressLines v-model="lines" />
+              <div v-if="limitErr && count > 1" class="error">
+                Only {{ room }} of the {{ count }} addresses fit in list {{ acl }}.
+              </div>
               <div v-if="sources.skipped" class="hint">
                 {{ sources.skipped }} {{ sources.skipped === 1 ? 'address is' : 'addresses are' }} a duplicate or already
                 in the list; skipped.
@@ -216,6 +230,7 @@ const ipText = (n: Net) => intToIp(n.net)
             <span>Anything else goes on to stage 2</span>
           </li>
         </ol>
+        <NAlert v-if="limitErr" type="error" :bordered="false" title="List full" class="warn">{{ limitErr }}</NAlert>
         <NAlert v-if="denyAny" type="error" :bordered="false" title="Drops everything" class="warn">
           A deny for any source drops all incoming traffic in stage 1, this console's connection included.
         </NAlert>
@@ -236,7 +251,7 @@ const ipText = (n: Net) => intToIp(n.net)
     <template #footer>
       <NSpace justify="end">
         <NButton @click="emit('close')">Cancel</NButton>
-        <NButton type="primary" :loading="submitting" @click="onAdd">
+        <NButton type="primary" :loading="submitting" :disabled="!!limitErr" @click="onAdd">
           {{ count > 1 ? `Add ${count} entries` : 'Add Entry' }}
         </NButton>
       </NSpace>
@@ -245,3 +260,9 @@ const ipText = (n: Net) => intToIp(n.net)
 </template>
 
 <style scoped src="./entryDialog.css"></style>
+<style scoped>
+.intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+</style>

@@ -3,7 +3,7 @@
 // aren't on the device. Each expands to its entries.
 import { computed, ref, watch } from 'vue'
 import { NButton, NSpace, NTag } from 'naive-ui'
-import { entryRows, isStandard } from '../policy'
+import { entryRows, isStandard, listFill } from '../policy'
 import { useAclPage } from '../aclPage'
 
 const page = useAclPage()
@@ -33,6 +33,7 @@ function toggle(acl: number) {
 
 const rows = (acl: number) => (page.config.value ? entryRows(page.config.value, acl) : [])
 const count = (acl: number) => page.entriesOf(acl).length
+const fill = (acl: number) => listFill(acl, count(acl))
 function why(acl: number, group: string) {
   return group === 'none' ? 'not applied' : `applied on ${page.appliedOn(acl).join(', ')}, not on this device`
 }
@@ -94,7 +95,7 @@ function apply(acl: number) {
           <span class="caret" :class="{ open: open.has(acl) }">▸</span>
           <strong>List {{ acl }}</strong>
           · {{ isStandard(acl) ? 'Standard' : 'Extended' }}
-          · {{ count(acl) }} {{ count(acl) === 1 ? 'entry' : 'entries' }}
+          · <span :class="{ near: fill(acl).nearFull }">{{ count(acl) }} of {{ fill(acl).max }} entries</span>
           · <span class="muted">{{ why(acl, g.key) }}</span>
         </button>
         <NSpace :size="[12, 4]" align="center" class="actions">
@@ -284,6 +285,10 @@ th {
 }
 .warn {
   color: #f0a020;
+}
+.near {
+  color: #f0a020;
+  font-weight: 600;
 }
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

@@ -186,7 +186,13 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
           </NSpace>
         </NFormItem>
         <NFormItem v-if="ports" label="Packet" :show-feedback="false">
-          <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
+          <div style="width: 100%">
+            <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
+            <div v-if="f.state === 'reply'" class="hint">
+              On the device, <code>reply</code> only matches when sw_flowd tracks the connection; without it, reply
+              entries match nothing.
+            </div>
+          </div>
         </NFormItem>
         <NFormItem label="Source address" :show-feedback="false">
           <NInput v-model:value="f.src" size="small" placeholder="For example 203.0.113.9" :status="srcBad ? 'error' : undefined" />
@@ -277,6 +283,11 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
   margin-top: 12px;
 }
 .muted {
+  color: #888;
+}
+.hint {
+  margin-top: 4px;
+  font-size: 12px;
   color: #888;
 }
 .res-drop {
