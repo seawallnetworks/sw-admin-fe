@@ -75,4 +75,19 @@ export const SunIcon = strokeIcon([
   'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4',
 ])
 export const MoonIcon = strokeIcon(['M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'])
-export const MonitorIcon = strokeIcon(['M3 4h18v12H3z', 'M8 20h8', 'M12 16v4'])
+/** System: a circle half light, half dark (the right half filled), as light or dark follows the computer. */
+export const SystemThemeIcon: FunctionalComponent = () =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      viewBox: '0 0 24 24',
+      width: '1em',
+      height: '1em',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.8,
+      'aria-hidden': 'true',
+    },
+    [h('circle', { cx: 12, cy: 12, r: 8 }), h('path', { d: 'M12 4a8 8 0 0 1 0 16z', fill: 'currentColor', stroke: 'none' })],
+  )

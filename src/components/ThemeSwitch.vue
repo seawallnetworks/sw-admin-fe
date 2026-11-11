@@ -3,11 +3,11 @@
 // and Dark. The choice is kept in this browser (src/theme.ts).
 import { computed, h, type Component } from 'vue'
 import { NButton, NDropdown, NIcon, type DropdownOption } from 'naive-ui'
-import { MonitorIcon, MoonIcon, SunIcon } from '../icons'
+import { MoonIcon, SunIcon, SystemThemeIcon } from '../icons'
 import { setThemeMode, themeMode, type ThemeMode } from '../theme'
 
 const THEMES: { mode: ThemeMode; label: string; icon: Component }[] = [
-  { mode: 'system', label: 'System', icon: MonitorIcon },
+  { mode: 'system', label: 'System', icon: SystemThemeIcon },
   { mode: 'light', label: 'Light', icon: SunIcon },
   { mode: 'dark', label: 'Dark', icon: MoonIcon },
 ]
