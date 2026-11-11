@@ -129,11 +129,12 @@ A form; the line it builds is shown at the bottom as "Entry", in the device's sy
 Opened by "+ Apply lists to another interface", "Change list" or "Add a standard/extended list" on a stage heading (interface fixed), and "Apply to an interface" on a list not in use (that list chosen).
 
 - Interface: type the name, for example `eth0`; the configured interfaces are suggested. The console can't list the device's interfaces yet, so it warns when the engine doesn't know the name ("may not exist on this device"). "Same lists as <interface>" chooses both stages as on that interface.
-- Stage 1 · Standard list (1-99) and Stage 2 · Extended list (100-199): None or one of the existing lists (with its entry count, its first entry, and "also on <interfaces>"). Stage 1 also has New list with a number (the next free one is filled in). Stage 2 has no New list, and an extended list with no entries can't be chosen ("add entries before applying it"): it would drop everything. To use a new extended list, create it with New List, add its entries, then apply it.
+- Stage 1 · Standard list (1-99) and Stage 2 · Extended list (100-199): None or one of the existing lists (with its entry count, its first entry, and "also on <interfaces>"). An extended list with no entries can't be chosen ("add entries before applying it"): it would drop everything.
+- "+ Create a new list…" under each stage opens New List for that stage's kind (see New List). Once created, the new list is chosen in that stage and the rest of the dialog is kept; Apply then applies it. Cancel there leaves the dialog as it was.
 - "Incoming traffic on <interface>, after this" says in a sentence what each stage will do.
 - A chosen list over its limit (64 or 128 entries) can't be applied: the page says how many entries to remove first.
 - Warnings: "Everything will be dropped" (red) if the interface already applies an empty extended list, and Apply is disabled until another list is chosen; "The console" (amber) when the extended list doesn't permit this console's TCP port: if you manage the device through this interface, applying it cuts off the console; a note that with no extended list everything stage 1 doesn't deny passes; a note when a list is shared with other interfaces.
-- Apply creates new lists, applies the chosen ones (choosing None removes the interface's list for that stage), and opens the interface's tab.
+- Apply applies the chosen lists (choosing None removes the interface's list for that stage), and opens the interface's tab.
 - The change takes effect at once but isn't saved: if it cuts off your access, restarting the device restores the saved configuration.
 
 ### Removing a list from an interface
@@ -155,6 +156,7 @@ Opened by "+ Apply lists to another interface", "Change list" or "Add a standard
   - Block sources: "Addresses to deny" (one per line, as for Several, at most 64), "Empty", or "A copy of list N".
   - Allow services: "Basic protection (recommended)", "Empty", or "A copy of list N". Basic protection needs the Management network you manage the device from, and creates: permit TCP from it to this console's port; permit TCP from it to port 22 (SSH); permit established TCP; permit UDP replies; permit ICMP.
 - On the right, the entries as they will be created, ending with what happens to anything else. Warnings for an empty extended list (once applied it drops everything, this console included) and for a copied extended list that doesn't permit this console's port.
+- Opened from "+ Create a new list…" in the Apply dialog, it is titled "New Standard List" or "New Extended List": the kind is fixed, there is no "What is it for?" and no "Empty", and the new list goes back to the Apply dialog, chosen.
 - "Create list" or "Create list with N entries". The new list is under Lists not in use until you apply it. If an entry fails, the list is still created and the page says which entries are missing.
 
 ### Examples

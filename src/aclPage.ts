@@ -55,8 +55,8 @@ export function statusCertainty(s: IfaceStatus): 'now' | 'maybe' | 'not' {
 
 // ---------- dialogs ----------
 
-/** A stage in the Apply dialog: no list, an existing list, or a new one. */
-export type StageChoice = number | 'none' | 'new'
+/** A stage in the Apply dialog: no list, or an existing list. */
+export type StageChoice = number | 'none'
 
 export interface EntryRequest {
   acl: number

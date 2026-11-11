@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // New List: a standard list to block sources, or an extended list to allow services, started
-// empty, from a template, or as a copy of another list.
+// empty, from a template, or as a copy of another list. Opened from the Apply dialog (`kind` given),
+// the kind is fixed, it can't start empty, and it reports the list it created instead of showing it.
 import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NForm, NFormItem, NInput, NInputNumber, NModal, NRadio, NRadioGroup, NSpace } from 'naive-ui'
 import AddressLines from './AddressLines.vue'
@@ -10,18 +11,20 @@ import { addAclEntry, createAcl } from '../api'
 import { CONSOLE_PORT, useAclPage } from '../aclPage'
 import type { AclEntry } from '../types'
 
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ kind?: 'std' | 'ext' }>()
+const emit = defineEmits<{ close: []; created: [acl: number] }>()
 const page = useAclPage()
 const config = computed(() => page.config.value!)
 
 type Kind = 'std' | 'ext'
-const kind = ref<Kind>('std')
+const fixed = !!props.kind
+const kind = ref<Kind>(props.kind ?? 'std')
 const standard = computed(() => kind.value === 'std')
 const range = computed(() => (standard.value ? STD_RANGE : EXT_RANGE))
 
-const number = ref<number | null>(nextFreeList(config.value, true))
+const number = ref<number | null>(nextFreeList(config.value, kind.value === 'std'))
 /** 'addresses' | 'basic' | 'empty' | 'copy-<n>' */
-const start = ref('addresses')
+const start = ref(kind.value === 'std' ? 'addresses' : 'basic')
 const lines = ref('')
 /**
  * The management network: where the console is used from.
@@ -47,7 +50,7 @@ const startOptions = computed(() => [
   ...(standard.value
     ? [{ value: 'addresses', label: 'Addresses to deny' }]
     : [{ value: 'basic', label: 'Basic protection (recommended)' }]),
-  { value: 'empty', label: 'Empty' },
+  ...(fixed ? [] : [{ value: 'empty', label: 'Empty' }]),
   ...inUse.value.map((a) => ({ value: `copy-${a}`, label: `A copy of list ${a}` })),
 ])
 
@@ -121,6 +124,10 @@ async function onCreate() {
   }
   const acl = number.value!
   const todo = entries.value
+  if (fixed && !todo.length) {
+    page.message.warning('Add the entries the list starts with')
+    return
+  }
   let created = false
   let done = 0
   submitting.value = true
@@ -132,8 +139,6 @@ async function onCreate() {
       done++
     }
     page.message.success(todo.length ? `List ${acl} created with ${todo.length} ${todo.length === 1 ? 'entry' : 'entries'}` : `List ${acl} created`)
-    page.goTo(page.UNUSED_TAB)
-    emit('close')
   } catch {
     // api.ts showed why. The list exists if it was created: say which entries it lacks.
     if (created) {
@@ -142,21 +147,25 @@ async function onCreate() {
         `List ${acl} was created, but ${missing.length} ${missing.length === 1 ? 'entry is' : 'entries are'} missing: ${missing.join('; ')}`,
         { duration: 15000 },
       )
-      page.goTo(page.UNUSED_TAB)
-      emit('close')
     }
   } finally {
-    submitting.value = false
     await page.refreshAfterChanges()
+    submitting.value = false
+  }
+  // after the refresh, so the list is in the page's lists with its entries
+  if (created) {
+    if (fixed) emit('created', acl)
+    else page.goTo(page.UNUSED_TAB)
+    emit('close')
   }
 }
 </script>
 
 <template>
-  <NModal :show="true" preset="card" title="New List" style="width: 1020px; max-width: calc(100vw - 32px)" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
+  <NModal :show="true" preset="card" :title="!fixed ? 'New List' : standard ? 'New Standard List' : 'New Extended List'" style="width: 1020px; max-width: calc(100vw - 32px)" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
     <div class="layout">
       <NForm label-placement="top" class="form">
-        <NFormItem label="What is it for?">
+        <NFormItem v-if="!fixed" label="What is it for?">
           <div class="cards" role="radiogroup">
             <button type="button" role="radio" :aria-checked="kind === 'std'" class="card" :class="{ on: kind === 'std' }" @click="kind = 'std'">
               <strong>Block sources</strong>
@@ -228,7 +237,8 @@ async function onCreate() {
           The copied list doesn't permit TCP port {{ CONSOLE_PORT }}, the port of this console. Applied to the interface
           you manage the device through, it cuts off the console.
         </NAlert>
-        <p class="muted small">A new list does nothing until you apply it to an interface.</p>
+        <p v-if="fixed" class="muted small">Created, it is chosen in the Apply dialog; Apply there applies it.</p>
+        <p v-else class="muted small">A new list does nothing until you apply it to an interface.</p>
       </div>
     </div>
     <template #footer>

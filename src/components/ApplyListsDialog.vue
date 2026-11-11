@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // Apply lists to an interface: a standard list for stage 1 and an extended list for stage 2, each
-// none, an existing list, or a new one.
+// none or an existing list. "Create a new list" opens New List for that stage and chooses what it creates.
 import { computed, ref } from 'vue'
 import {
-  NAlert, NAutoComplete, NButton, NForm, NFormItem, NInputNumber, NModal, NRadio, NRadioGroup, NSpace,
+  NAlert, NAutoComplete, NButton, NForm, NFormItem, NModal, NRadio, NRadioGroup, NSpace,
 } from 'naive-ui'
-import { boundLists, isStandard, listFill, nextFreeList, permitsTcpPort, EXT_RANGE, STD_RANGE } from '../policy'
+import { boundLists, isStandard, listFill, permitsTcpPort, EXT_RANGE, STD_RANGE } from '../policy'
 import { parseAceRule } from '../ace'
-import { createAcl } from '../api'
+import NewListDialog from './NewListDialog.vue'
 import { CONSOLE_PORT, consoleWarning, useAclPage, type ApplyRequest, type StageChoice } from '../aclPage'
 
 const props = defineProps<{ req: ApplyRequest }>()
@@ -23,8 +23,14 @@ const current = computed(() =>
 
 const initial = boundLists(config.value, props.req.iface ?? '')
 const std = ref<StageChoice>(props.req.std ?? initial.std ?? 'none')
-const ext = ref<StageChoice>(props.req.ext === 'new' ? 'none' : (props.req.ext ?? initial.ext ?? 'none'))
-const newStd = ref<number | null>(nextFreeList(config.value, true))
+const ext = ref<StageChoice>(props.req.ext ?? initial.ext ?? 'none')
+
+/** The stage New List is open for, or null. */
+const creating = ref<'std' | 'ext' | null>(null)
+function onCreated(acl: number) {
+  if (isStandard(acl)) std.value = acl
+  else ext.value = acl
+}
 
 // ---------- the interface ----------
 
@@ -71,21 +77,9 @@ const alsoText = (acl: number) => {
   return on.length ? `also on ${on.join(', ')}` : ''
 }
 
-/** A new list's number: its error, if any. */
-function newNumberError(n: number | null, standard: boolean): string | null {
-  const [lo, hi] = standard ? STD_RANGE : EXT_RANGE
-  if (n === null || !Number.isInteger(n) || n < lo || n > hi) return `Enter a number from ${lo} to ${hi}`
-  if (String(n) in config.value.acls) return `List ${n} exists; choose it above, or another number`
-  return null
-}
-const newStdError = computed(() => (std.value === 'new' ? newNumberError(newStd.value, true) : null))
-
-/**
- * The list each stage ends up with (a new list by its number), or null. Stage 2 has no "New list":
- * a new extended list is empty, and an empty one drops everything, so it can't be applied.
- */
-const chosenStd = computed(() => (std.value === 'none' ? null : std.value === 'new' ? newStd.value : std.value))
-const chosenExt = computed(() => (typeof ext.value === 'number' ? ext.value : null))
+/** The list each stage ends up with, or null. */
+const chosenStd = computed(() => (std.value === 'none' ? null : std.value))
+const chosenExt = computed(() => (ext.value === 'none' ? null : ext.value))
 const extEntries = computed(() => (chosenExt.value === null ? [] : page.entriesOf(chosenExt.value)))
 
 /**
@@ -103,7 +97,7 @@ const overLimit = computed(() =>
 
 const stage1Sentence = computed(() => {
   if (chosenStd.value === null) return 'Stage 1: no standard list; no source is dropped here.'
-  const es = std.value === 'new' ? [] : page.entriesOf(chosenStd.value)
+  const es = page.entriesOf(chosenStd.value)
   const denies = es.filter((e) => parseAceRule(e.ace, true)?.action === 'deny').length
   if (!denies) return `Stage 1: list ${chosenStd.value} denies nothing yet; every packet goes on to stage 2.`
   return `Stage 1: list ${chosenStd.value} drops the sources its ${denies} deny ${denies === 1 ? 'entry matches' : 'entries match'}; the rest go on to stage 2.`
@@ -119,13 +113,13 @@ const noConsole = computed(() => chosenExt.value !== null && extEntries.value.le
 const failOpen = computed(() => chosenExt.value === null && chosenStd.value !== null)
 const shared = computed(() =>
   [chosenStd.value, chosenExt.value]
-    .filter((a): a is number => a !== null && (std.value !== 'new' || a !== newStd.value))
+    .filter((a): a is number => a !== null)
     .map((a) => ({ acl: a, on: page.alsoOn(a, name.value) }))
     .filter((x) => x.on.length),
 )
 const nothing = computed(() => chosenStd.value === null && chosenExt.value === null && current.value.std === null && current.value.ext === null)
 const unchanged = computed(
-  () => std.value !== 'new' && chosenStd.value === current.value.std && chosenExt.value === current.value.ext,
+  () => chosenStd.value === current.value.std && chosenExt.value === current.value.ext,
 )
 
 // ---------- applying ----------
@@ -134,7 +128,6 @@ const submitting = ref(false)
 const problem = computed(() => {
   if (!name.value) return 'Enter the interface'
   if (nameError.value) return nameError.value
-  if (newStdError.value) return newStdError.value
   if (overLimit.value.length) {
     const { acl, fill } = overLimit.value[0]
     return `List ${acl} can hold at most ${fill.max} entries; it has ${fill.count}. Remove some first.`
@@ -153,7 +146,6 @@ async function onApply() {
   const i = name.value
   submitting.value = true
   try {
-    if (std.value === 'new') await createAcl(newStd.value!)
     await page.setLists(i, chosenStd.value, chosenExt.value)
     page.message.success(`${i} applies ${[chosenStd.value, chosenExt.value].filter((a) => a !== null).map((a) => `list ${a}`).join(' and ') || 'no list'}`)
     await page.refreshAfterChanges()
@@ -203,22 +195,9 @@ async function onApply() {
               List {{ a }} <span class="muted">· {{ summary(a) }}</span>
               <span v-if="alsoText(a)" class="also"> · {{ alsoText(a) }}</span>
             </NRadio>
-            <NRadio value="new">
-              New list
-              <NInputNumber
-                v-if="std === 'new'"
-                v-model:value="newStd"
-                size="tiny"
-                :min="STD_RANGE[0]" :max="STD_RANGE[1]"
-                :show-button="false"
-                :status="newStdError ? 'error' : undefined"
-                style="width: 80px; display: inline-flex; margin-left: 6px"
-              />
-              <span class="muted"> {{ STD_RANGE[0] }}-{{ STD_RANGE[1] }}</span>
-            </NRadio>
-            <div v-if="newStdError" class="error">{{ newStdError }}</div>
           </NSpace>
         </NRadioGroup>
+        <NButton text type="primary" size="small" class="create" @click="creating = 'std'">+ Create a new list…</NButton>
       </fieldset>
       <fieldset>
         <legend>Stage 2 · Extended list ({{ EXT_RANGE[0] }}-{{ EXT_RANGE[1] }})</legend>
@@ -231,10 +210,8 @@ async function onApply() {
               <span v-if="alsoText(a)" class="also"> · {{ alsoText(a) }}</span>
             </NRadio>
           </NSpace>
-          <div class="muted small new-hint">
-            To use a new extended list, create it with New List, add its entries, then apply it here.
-          </div>
         </NRadioGroup>
+        <NButton text type="primary" size="small" class="create" @click="creating = 'ext'">+ Create a new list…</NButton>
       </fieldset>
     </div>
 
@@ -280,6 +257,7 @@ async function onApply() {
       </NSpace>
     </template>
   </NModal>
+  <NewListDialog v-if="creating" :kind="creating" @created="onCreated" @close="creating = null" />
 </template>
 
 <style scoped>
@@ -324,8 +302,9 @@ legend {
 .also {
   color: var(--c-info-text);
 }
-.new-hint {
-  margin-top: 8px;
+.create {
+  display: block;
+  margin-top: 10px;
 }
 .small {
   font-size: 12px;

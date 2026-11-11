@@ -45,17 +45,15 @@ function insertBelow(r: Extract<PolicyRow, { kind: 'entry' }>) {
   page.openAddEntry({ acl: r.acl, iface: props.iface, pos: positionAfter(page.entriesOf(r.acl), r.seq) })
 }
 
-/** "Add a standard/extended list": preselects a list of that kind no interface uses, else a new one. */
+/**
+ * "Add a standard/extended list": preselects a list of that kind no interface uses (an extended one
+ * only with entries: an empty one can't be applied). Without one, the dialog offers to create one.
+ */
 function addList(stage: 1 | 2) {
-  const { notApplied } = page.unused.value
-  if (stage === 1) {
-    const free = notApplied.find(isStandard)
-    page.openApply({ iface: props.iface, fixed: true, std: free ?? 'new' })
-    return
-  }
-  // an empty extended list can't be applied, and a new one is empty
-  const free = notApplied.find((a) => !isStandard(a) && page.entriesOf(a).length > 0)
-  page.openApply({ iface: props.iface, fixed: true, ...(free !== undefined ? { ext: free } : {}) })
+  const free = page.unused.value.notApplied.find((a) =>
+    stage === 1 ? isStandard(a) : !isStandard(a) && page.entriesOf(a).length > 0,
+  )
+  page.openApply({ iface: props.iface, fixed: true, ...(free === undefined ? {} : stage === 1 ? { std: free } : { ext: free }) })
 }
 
 function changeList(stage: 1 | 2, acl: number) {
