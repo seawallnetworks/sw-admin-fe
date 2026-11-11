@@ -7,7 +7,7 @@ import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
-/** Also read by the script in index.html, before the app loads. */
+/** Also read by public/theme-init.js, before the app loads. */
 const KEY = 'sw_theme'
 
 function readMode(): ThemeMode {

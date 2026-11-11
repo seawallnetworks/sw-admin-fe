@@ -1,6 +1,6 @@
 /*
  * The console's colors, for the light and the dark theme. src/theme.ts sets data-theme on <html>
- * (index.html does it first, before the app loads, so a dark page never flashes white).
+ * (public/theme-init.js does it first, before the app loads, so a dark page never flashes white).
  *
  * Accent colors are for bars, borders and fills; text colors are for words, and meet 4.5:1
  * contrast on the page and card backgrounds of their theme. The dark values are GitHub's (Primer
