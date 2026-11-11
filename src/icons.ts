@@ -67,3 +67,12 @@ export const BrandIcon = strokeIcon([
   'M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z',
   'M7.5 12.5c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0',
 ])
+
+/** The theme switch's icons: Light, Dark, and System (follows the computer). */
+export const SunIcon = strokeIcon([
+  'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4',
+  'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4',
+])
+export const MoonIcon = strokeIcon(['M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'])
+export const MonitorIcon = strokeIcon(['M3 4h18v12H3z', 'M8 20h8', 'M12 16v4'])

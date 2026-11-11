@@ -6,11 +6,12 @@ import {
   NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type DropdownOption, type MenuOption,
 } from 'naive-ui'
 import HelpDrawer from './components/HelpDrawer.vue'
+import ThemeSwitch from './components/ThemeSwitch.vue'
 import {
   AclIcon, BrandIcon, BruteForceIcon, CcIcon, DashboardIcon, DdosIcon, HttpFloodIcon, LogsIcon,
 } from './icons'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
-import { naiveTheme, setThemeMode, themeMode, type ThemeMode } from './theme'
+import { naiveTheme } from './theme'
 
 const route = useRoute()
 const isPublic = computed(() => route.meta.public)
@@ -57,27 +58,9 @@ async function onSave() {
   }
 }
 
-const THEMES: [ThemeMode, string][] = [
-  ['system', 'System'],
-  ['light', 'Light'],
-  ['dark', 'Dark'],
-]
-const userOptions = computed<DropdownOption[]>(() => [
-  {
-    key: 'theme',
-    label: 'Theme',
-    children: THEMES.map(([mode, label]) => ({
-      key: `theme:${mode}`,
-      // the current one is checked
-      label: `${themeMode.value === mode ? '✓' : '\u2003'} ${label}`,
-    })),
-  },
-  { type: 'divider', key: 'd1' },
-  { key: 'logout', label: 'Log out' },
-])
+const userOptions: DropdownOption[] = [{ key: 'logout', label: 'Log out' }]
 function onUserSelect(key: string) {
   if (key === 'logout') logout()
-  else if (key.startsWith('theme:')) setThemeMode(key.slice(6) as ThemeMode)
 }
 </script>
 
@@ -126,6 +109,7 @@ function onUserSelect(key: string) {
                 <NButton v-if="isAdmin" type="primary" :disabled="!unsavedChanges" :loading="saving" @click="onSave">
                   Save Config
                 </NButton>
+                <ThemeSwitch />
                 <HelpDrawer />
                 <NDropdown :options="userOptions" trigger="click" @select="onUserSelect">
                   <NButton quaternary>{{ username || 'User' }} ▾</NButton>
