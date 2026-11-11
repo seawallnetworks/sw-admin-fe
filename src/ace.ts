@@ -375,3 +375,53 @@ export function parseAceRule(ace: string, standard: boolean): AceRule | null {
   if (end !== words.length) return null
   return { ...base, proto, src: src[0], sport: sp[0], dst: dst[0], dport: dp[0], established, reply }
 }
+
+// ---------- addresses typed by hand: a stage 1 source, or one line of "Several" ----------
+
+export type ParsedAddr = { net: Net; error?: undefined } | { net?: undefined; error: string }
+
+/**
+ * One source as a person types it: an address (`192.0.2.7`, also `host 192.0.2.7`), a network in
+ * CIDR form (`198.51.100.0/24`), or `any`. A network with host bits set is refused, naming the network.
+ */
+export function parseAddress(raw: string): ParsedAddr {
+  const s = raw.trim().replace(/^host\s+/, '')
+  if (!s) return { error: 'Enter an address' }
+  if (s === 'any') return { net: ANY_NET }
+  const [ip, len, ...rest] = s.split('/')
+  const n = ipToInt(ip)
+  if (n === null || rest.length) return { error: `"${s}" is not an IPv4 address or network` }
+  if (len === undefined) return { net: { net: n, prefix: 32 } }
+  if (!/^\d{1,2}$/.test(len) || +len > 32) return { error: `"${s}": the prefix length must be 0 to 32` }
+  const prefix = +len
+  const net = (n & prefixMask(prefix)) >>> 0
+  if (net !== n) return { error: `${s} has host bits set; the network is ${intToIp(net)}/${prefix}` }
+  return { net: { net, prefix } }
+}
+
+/** A standard entry for one source. The device rewrites a network in its own form. */
+export function stdAce(action: AceAction, n: Net): string {
+  const src = n.prefix === 0 ? 'any' : n.prefix === 32 ? `host ${intToIp(n.net)}` : `${intToIp(n.net)}/${n.prefix}`
+  return `${action} ${src}`
+}
+
+export interface AddrLines {
+  /** The good lines, in order, each with its 1-based line number. */
+  items: { line: number; text: string; net: Net }[]
+  errors: { line: number; text: string; error: string }[]
+}
+
+/** A textarea of sources, one per line; blank lines and lines starting with # are skipped. */
+export function parseAddrLines(text: string): AddrLines {
+  const out: AddrLines = { items: [], errors: [] }
+  text.split('\n').forEach((raw, i) => {
+    const t = raw.trim()
+    if (!t || t.startsWith('#')) return
+    const r = parseAddress(t)
+    if (r.net) out.items.push({ line: i + 1, text: t, net: r.net })
+    else out.errors.push({ line: i + 1, text: t, error: r.error })
+  })
+  return out
+}
+
+export const sameNet = (a: Net, b: Net) => a.net === b.net && a.prefix === b.prefix

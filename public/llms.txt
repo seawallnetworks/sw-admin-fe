@@ -5,8 +5,8 @@
 ## For AI assistants
 
 - Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
-- Access list changes (adding or deleting an entry or a list, applying a list to an interface or removing it) take effect as soon as the user clicks "OK" or confirms, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
-- Applying an extended list (100 to 199) to an interface drops all incoming traffic the list doesn't permit, even when the list is empty, and that can cut off the user's own connection to the console. Before suggesting it, make sure the list permits what must keep working, such as the console itself (TCP port 8443). If the user is already cut off, restarting the device restores the saved configuration, as long as the change wasn't saved with "Save Config".
+- Access list changes (adding or deleting an entry or a list, applying a list to an interface or removing it) take effect as soon as the user clicks the dialog's button or confirms, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
+- Applying an extended list (100 to 199) to an interface drops all incoming traffic the list doesn't permit, even when the list is empty, and that can cut off the user's own connection to the console. Before suggesting it, make sure the list permits what must keep working, such as the console itself (TCP port 8443); "Basic protection" in New List does. "Test a packet" on the interface's tab shows what a list would do to a given packet. If the user is already cut off, restarting the device restores the saved configuration, as long as the change wasn't saved with "Save Config".
 - If you don't know, say so, and suggest the user ask their device administrator.
 
 ## Logging in and out
@@ -45,99 +45,120 @@ Shows the device's live state. It refreshes every 5 seconds (paused while the br
 
 ## Access Lists
 
-Access lists (ACLs) allow or block traffic, in the same numbered, Cisco-style form as the device's command line. The page has three parts: ACL Engine, Access Lists and Interfaces. Administrators only.
+Access lists (ACLs) allow or block incoming traffic, in the same numbered, Cisco-style form as the device's command line. The page is organised by interface: one tab per interface shows everything that happens to traffic arriving on it, in order. Administrators only.
 
 ### How access lists work
 
-- Each list has a number. Lists 1 to 99 are standard: they match only the source address. Lists 100 to 199 are extended: they match the protocol, source and destination addresses, and ports.
-- A list is made of entries. Each entry has a "Seq" (sequence number, 1 to 65535), an action (Permit or Deny) and what it matches. The device stores it as a line in Cisco syntax, for example `permit tcp any any eq 22`, the same as on its command line.
-- Within a list, entries are checked in Seq order, lowest first, and the first entry that matches decides.
-- An interface applies lists to its incoming traffic: at most one standard and one extended list. A list does nothing until an interface applies it, and an interface that applies no list lets all traffic through.
-- A packet is checked against the standard list first, then the extended list:
-  - Standard list: deny drops the packet. permit, or no matching entry, moves on to the extended list; a standard permit does not skip the extended list. So a standard list works as a block list: traffic it doesn't deny goes on.
-  - Extended list: permit lets the packet through, deny drops it, and a packet that matches no entry is dropped (implicit deny). With no extended list applied, what the standard list didn't deny goes through.
-- Only IPv4 is filtered; other traffic (ARP, IPv6) always goes through.
-- The device checks every entry and may rewrite it in its own form, so an entry can look slightly different from what was typed. The list shows it as the device has it.
+- Each list has a number. Lists 1 to 99 are standard: they match only the source address. Lists 100 to 199 are extended: they match the protocol, source and destination addresses, ports, and optionally established connections or replies.
+- A list is made of entries. Each entry has a "Seq" (sequence number, 1 to 65535), an action (permit or deny) and what it matches. The device stores it as a line in Cisco syntax, for example `permit tcp any any eq 22`, and may rewrite what was typed in its own form (a network `198.51.100.0/24` is shown back as `198.51.100.0 0.0.0.255`).
+- An interface applies lists to its incoming traffic only: at most one standard and one extended list. A list does nothing until an interface applies it. A list can be applied on several interfaces; a change to it applies on all of them.
+- A packet arriving on an interface goes through two stages:
+  - Stage 1, the standard list (if any): the first entry, in Seq order, whose source matches decides. Deny drops the packet. Permit, or no matching entry, goes on to stage 2. So a standard list is a block list; a permit in it only matters as an exception placed before a deny that covers the same source.
+  - Stage 2, the extended list (if any): the first matching entry decides, permit passes and deny drops. A packet no entry matches is dropped (the implicit deny), even when the list is empty. With no extended list, everything that gets past stage 1 passes.
+- Outgoing traffic isn't filtered. Non-first IPv4 fragments skip stage 2. Traffic that isn't IPv4 (ARP, IPv6) always passes.
 
-### ACL Engine
+### The page
 
-The engine is what enforces the access lists on traffic. The card refreshes every 5 seconds.
+- A row of tabs: one per interface that has lists, each with a tag: "Filtered" (the engine is filtering it), "Not on this device" (the configuration names an interface the device doesn't have), or "Not filtered". After a divider, "Lists not in use", with how many there are. On the right, "+ Apply lists to another interface".
+- The selected tab is part of the page's address (for example `/acl?iface=eth0`), so a reload or a shared link opens the same tab.
 
-- The tag at the top right shows its state:
-  - Enforced: the lists shown on the page are in force.
-  - Applying: the latest change hasn't reached the engine yet; it normally becomes Enforced within seconds.
-  - Engine down: the engine isn't running; the device keeps retrying. Contact the administrator if it stays.
-  - Refused: the engine refused the configuration; the reason is shown below.
-  - Off: the device runs without the engine, so the lists aren't enforced.
-- "since" is when it entered that state.
-- Passed (packets) and Dropped (packets): the engine's packet counters, for all lists together. There are no counters per entry.
-- Interfaces filtered: the interfaces the engine is filtering now.
-- A warning such as "eth9 applies a list but doesn't exist on this device" means an interface in the configuration isn't on the device, so nothing is filtered there. Check the interface name.
+### An interface's tab
 
-### Access Lists
-
-- Each list has a tab with its number. Above the entries: whether it is standard or extended, and the interfaces that apply it. The last tab, "Effective Policy", shows what an interface does with all its lists together (below).
-- Columns: Seq, Action (Permit or Deny), Source, and for an extended list also Protocol, Destination and Options; then Actions. A network is shown as `198.51.100.0/24`, and a port after its address, for example "Any, port 22". An entry the page can't split into columns is shown as its Cisco text.
-- Add an entry: open the list's tab, click "Add Entry", fill in the form, and click "OK". A new entry in a standard list starts as Deny, one Host; in an extended list as Permit, TCP, with the destination port still to choose:
-  - Action: Permit or Deny.
-  - Protocol (extended lists only): IP (any protocol), TCP, UDP, ICMP, or Other, by protocol number 0 to 255.
-  - Source, and Destination (extended lists only): Any; Host, one address such as `192.168.1.10`; or Network, an address and prefix length such as `192.168.1.0/24`. The network address must have no host bits set: `192.168.1.0/24`, not `192.168.1.5/24`.
-  - Destination port (TCP and UDP only): the service being reached. Click Any port, SSH 22, DNS 53, HTTP 80, HTTPS 443 or Console 8443, or type another port in "Other port". "OK" asks for one until you choose. For a port range, use "Type the entry".
-  - Source port (TCP and UDP only): usually Any port; also Equal to, Range, Greater than or Less than, with port numbers 1 to 65535.
-  - Match (TCP and UDP only): All packets; Established connections only (TCP: packets with ACK or RST, so replies to connections already open); or Replies to connections this device opened.
-  - Position: where the entry goes, since the first entry that matches decides. "At the top", "After seq A, before B" for each gap, or "At the end" (the default). Each choice shows the Seq the entry gets: half the first Seq at the top, halfway between A and B, the last Seq + 10 at the end. A gap with no free number (B is A + 1) can't be chosen.
-  - "Entry" at the bottom shows the line the form builds, in the device's syntax.
-- Next to the form, "Where it goes in list N" shows the list with the new entry in place, highlighted, and what happens to anything no entry matches. Two warnings may show there:
-  - "This entry will never match": an earlier entry already matches every packet the new one would (same or any protocol, its addresses and ports include the new one's). Put the new entry above it, or change the earlier one.
-  - "Very broad": a permit from any source to any destination on every port. Nothing after it in the list is ever reached.
-- To type the entry in Cisco syntax instead, turn on "Type the entry" at the bottom left of the dialog. It starts from what the form has built.
-  - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network such as `198.51.100.0/24` (a wildcard mask, `198.51.100.0 0.0.0.255`, works too).
-  - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`.
-- There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, choose that gap in "Position".
-- Delete an entry: click "Delete" on its row and confirm. If the list is an extended list in force on an interface, the confirmation warns that removing a permit entry can cut off traffic, including this console.
+1. The status line says whether the lists are in force on this interface. It refreshes every 5 seconds (paused while the browser tab is in the background):
+   - Enforced (green): the lists shown are in force. Also shows the engine's Passed and Dropped packet counters, for all interfaces together; there are no counters per entry.
+   - Applying (blue): the latest change hasn't reached the engine yet; the interface may still run the previous lists. It normally becomes Enforced within seconds.
+   - Engine down (red): the engine that enforces the lists isn't running; the device keeps retrying.
+   - Refused (red): the engine refused the configuration; the reason is shown below. The interface may still run the previous lists.
+   - Off (grey): the device runs without the engine; nothing is filtered.
+   - Not on this device: no interface of this name exists, so its lists filter nothing; they start filtering if it appears. Check the name.
+   - Not filtered: the engine is running but isn't filtering this interface, or the interface applies no list.
+2. "Test a packet" (below).
+3. The policy table, with columns Seq, Protocol, Source, Destination, Result, Actions:
+   - "Stage 1 · Standard list N", its entries (deny → Drop, permit → Go on to stage 2), then "Anything else → Go on to stage 2". With no standard list it says "No standard list", with an "Add a standard list" button.
+   - "Stage 2 · Extended list N", its entries (permit → Pass, deny → Drop), then "Anything else → Drop (implicit)". With none it says "No extended list: everything past stage 1 passes", with an "Add an extended list" button.
+   - Each stage heading has "Add Entry", "Change list" and "Remove from <interface>". If the list is applied elsewhere too, it says "Also applied on <interfaces>; changes apply there too".
+   - Notes under a result: "No effect: nothing after it in this list denies this source" on a standard permit that no later deny overlaps (it changes nothing; a permit placed before an overlapping deny is an exception and does matter, so it has no note). "Never matches: seq N covers it" when an earlier entry already matches everything this one would.
+   - Each entry has "Insert below" (Add Entry, positioned right after it) and "Delete". Delete asks in two steps: the first click turns it into a red "Confirm delete" and shows underneath what deleting does, for example that the traffic a permit lets in will fall to the implicit deny; the second click deletes. "Cancel" there leaves it.
+   - Below the table: outgoing traffic isn't filtered, non-first fragments skip stage 2, and changes take effect at once but only Save Config keeps them.
 - If someone else changed the access lists (another administrator, or the command line) since the page showed them, a delete is not made: the page shows the lists as they are now and says so. Check the entry and delete it again.
-- Delete a list: click "Delete List" on its tab and confirm. A list that an interface applies can't be deleted; remove it from the interface first.
-- If the device refuses a change, its reason is shown as it is, for example "access list 100 already has sequence 10" or "access list 100 is applied to eth0; remove it there first".
-
-### Effective Policy
-
-The "Effective Policy" tab (after the list tabs) shows, for one interface, every entry a packet arriving on it can meet, in the order it meets them. Choose the interface at the top. Read only.
-
-- Stage 1 · Standard list N: the interface's standard list, if it applies one. Deny → Drop. Permit → Go on to stage 2. "Anything else → Go on to stage 2". A permit marked "No effect" changes nothing, since the standard list already lets on what it doesn't deny; a permit before a deny that overlaps it is marked "Exempts these sources from the deny entries after it".
-- Stage 2 · Extended list N: the interface's extended list, if any. Permit → Pass, Deny → Drop, and "Anything else → Drop (implicit)". If the interface applies no extended list, everything that gets past stage 1 passes.
-- Columns: #, Seq, Protocol, Source, Destination, Result.
-- Outgoing traffic isn't filtered. Non-first IPv4 fragments skip stage 2, and traffic that isn't IPv4 always passes.
+- An interface left with no list has "Remove <interface> from the configuration" at the bottom.
 
 ### Test a packet
 
-Above the Effective Policy table, click "Test a packet" to open it (it stays open or closed the next time, in this browser).
+Click "Test a packet" above the table to open it; it stays open or closed the next time, in this browser.
 
 - Describe a packet: Protocol (TCP, UDP, ICMP, or Other by number), Source address, Destination address, and for TCP and UDP the ports and the kind of packet: New connection (SYN), Established (ACK or RST set; TCP only), or Reply to a connection this device opened.
 - "Fill in" buttons prefill fields: This console (TCP to this console's address and port), SSH, HTTPS, DNS, Ping. Every field stays editable.
-- The result updates as you type: "Passed" or "Dropped", and the path, for example "Stage 1: no deny matches 203.0.113.9. Stage 2: entry 20 of list 100 (deny tcp any any eq 22) matches." The deciding row is highlighted in the table, green for pass and red for drop.
-- A red field isn't a valid address. Until every needed field is filled in, it says "Incomplete" and what to enter.
+- The result updates as you type: "Passed" or "Dropped", and the path, for example "Stage 1: no deny matches 203.0.113.9. Stage 2: entry 20 of list 100 (deny tcp any any eq 22) matches." or "... so the implicit deny drops it." The deciding row is highlighted in the table, green for pass and red for drop. Nothing is highlighted while the panel is closed.
+- If the lists aren't Enforced yet (Applying, Refused, Engine down), the result adds "(may still be the previous lists)". If the interface isn't filtered at all, it says "Not filtered", then what would happen once enforced.
+- A red field isn't a valid address. Until the packet is complete it says "Incomplete — enter ..." and what is missing.
 - A blank source port matches only entries without a source port; the result says when that is why an entry didn't match.
-- The console works this out from the lists as shown, the way the device matches packets; the device itself isn't asked. Use it to check a change before relying on it.
+- The console works this out from the lists as shown, the way the device matches packets; the device itself isn't asked.
 
-### Interfaces
+### Add Entry: stage 1 (a standard list)
 
-- Columns: Interface, Lists applied (incoming), Actions. Next to the name, "Filtered" means the engine is filtering it now; "Not on this device" means no such interface exists.
-- Apply a list: click "Apply List" (on the interface's row, or at the top right of the card for an interface not listed yet), enter the interface name, for example `eth0`, choose the list, and click "OK". It replaces the list of the same kind (standard or extended) the interface applied.
-- Applying an extended list asks first, since the interface then drops all incoming traffic the list doesn't permit, including this console's connection if it arrives on that interface. An empty extended list drops ALL incoming traffic on it. Before applying one, make sure it permits what must keep working, for example the console: `permit tcp any any eq 8443`. A standard list needs no such care: it only drops what it denies.
-- Stop applying a list: click the × on its tag in "Lists applied" and choose "Remove". This is the safe direction: the interface stops filtering by that list.
-- Delete: click "Delete" on the row and confirm. The interface stops applying all its lists.
+The title says where the entry goes, for example "Add to Stage 1 · List 10 (standard · eth0)".
+
+- Action: "Deny (block)" (the default) drops the source; stage 2 never sees it. "Permit (exempt)" lets the source skip the deny entries after it and go on to stage 2: place it before the deny it is an exception to.
+- Source: Host (one address, the default), Network (for example `198.51.100.0/24`; the address must have no host bits set, and the error names the right network), Any, or Several: one address or network per line, one entry each. Bad lines are listed with their line numbers; duplicates and addresses already in the list are skipped, and it says how many.
+- Position: "At the top", "After seq A, before B" for each gap, or "At the end". By default the entry goes just before the first entry that matches every source (such as `permit any`), since nothing after that is reached; otherwise at the end. Each choice shows the Seq numbers the new entries get. If they don't fit in a gap it says "No room here; choose another position".
+- On the right, stage 1 as it will be after the change, new rows highlighted, ending with "anything else goes on to stage 2". Warnings: "Never matches" (an earlier entry already covers the source), "No effect here" (a permit with no later deny it is an exception to), "Drops everything" (deny any), "Large network" (shorter than /16).
+- The button says "Add Entry" or "Add N entries". If one of several fails, the ones before it stay added, the rest stay in the box, and the page says which were added.
+
+### Add Entry: stage 2 (an extended list)
+
+A form; the line it builds is shown at the bottom as "Entry".
+
+- Action: Permit (the default) or Deny.
+- Protocol: IP (any protocol), TCP (the default), UDP, ICMP, or Other by number. Other refuses 0 (choose "IP (any protocol)"), and 1, 6 and 17 switch to ICMP, TCP and UDP so the port fields show.
+- Source and Destination: Any, Host, or Network (`192.168.1.0/24`).
+- Destination port (TCP and UDP): Any port, SSH 22, DNS 53, HTTP 80, HTTPS 443, Console (this console's port), or another port in the number field. Add Entry asks for one until you choose. Source port: usually Any port; also Equal to, Range, Greater than, Less than.
+- Match (TCP and UDP): All packets; Established connections only (TCP packets with ACK or RST); or Replies to connections this device opened.
+- Position: as for stage 1; the default is at the end.
+- On the right, the list with the new entry in place, ending with the implicit deny. Warnings: "Never matches" (an earlier entry with the same or any protocol, addresses and ports that include the new one's, and no extra condition), "Very broad" (permit any source to any destination on every port: nothing after it is reached), and "The console" (the list doesn't permit this console's TCP port; see below).
+- "Type the entry" at the bottom left takes the entry in Cisco syntax instead: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`. Use it for a destination port range.
+- There is no Edit: to change an entry, add the new one and delete the old one.
+
+### Apply lists to an interface
+
+Opened by "+ Apply lists to another interface", "Change list" or "Add a standard/extended list" on a stage heading (interface fixed), and "Apply to an interface" on a list not in use (that list chosen).
+
+- Interface: type the name, for example `eth0`; the configured interfaces are suggested. The console can't list the device's interfaces yet, so it warns when the engine doesn't know the name ("may not exist on this device"). "Same lists as <interface>" chooses both stages as on that interface.
+- Stage 1 · Standard list (1-99) and Stage 2 · Extended list (100-199): None, one of the existing lists (with its entry count, its first entry, and "also on <interfaces>"), or New list with a number (the next free one is filled in).
+- "Incoming traffic on <interface>, after this" says in a sentence what each stage will do.
+- Warnings: "Everything will be dropped" (red) for an empty or new extended list, and the button becomes "Apply anyway"; "The console" (amber) when the extended list doesn't permit this console's TCP port: if you manage the device through this interface, applying it cuts off the console; a note that with no extended list everything stage 1 doesn't deny passes; a note when a list is shared with other interfaces.
+- Apply creates new lists, applies the chosen ones (choosing None removes the interface's list for that stage), and opens the interface's tab.
+- The change takes effect at once but isn't saved: if it cuts off your access, restarting the device restores the saved configuration.
+
+### Removing a list from an interface
+
+"Remove from <interface>" on a stage heading only stops applying the list there. If no interface uses the list afterwards, the same question asks "List N is no longer used anywhere. Delete it too?": "Keep it" (it moves to Lists not in use) or "Delete list".
+
+### Lists not in use
+
+- "New List" at the top right.
+- Two groups: "Not applied to any interface", and "Applied only to interfaces that are not on this device" (they would start filtering if the interface appeared). "None." when a group is empty.
+- Click a list's row to show its entries, each with a two-step Delete.
+- Actions: "Apply to an interface", "Add Entry", "Delete list" (two steps; for the second group it also removes the list from those interfaces), and for the second group "Remove from <interface>".
+
+### New List
+
+- "What is it for?": "Block sources" (a standard list, 1-99: checked first, by source only; for blocklists) or "Allow services" (an extended list, 100-199: lets in what you permit and drops the rest).
+- Number: the next free number of that kind is filled in, by tens first. A number out of range or taken is marked red; the numbers in use are listed.
+- Start with:
+  - Block sources: "Addresses to deny" (one per line, as for Several), "Empty", or "A copy of list N".
+  - Allow services: "Basic protection (recommended)", "Empty", or "A copy of list N". Basic protection needs the Management network you manage the device from, and creates: permit TCP from it to this console's port; permit TCP from it to port 22 (SSH); permit established TCP; permit UDP replies; permit ICMP.
+- On the right, the entries as they will be created, ending with what happens to anything else. Warnings for an empty extended list (once applied it drops everything, this console included) and for a copied extended list that doesn't permit this console's port.
+- "Create list" or "Create list with N entries". The new list is under Lists not in use until you apply it. If an entry fails, the list is still created and the page says which entries are missing.
 
 ### Examples
 
-- Allow SSH only from the office network `192.168.1.0/24`, on eth0:
-  1. Click "New List", enter 100 and click "OK".
-  2. On tab 100, click "Add Entry": Action Permit, Protocol TCP, Source Network `192.168.1.0/24`, Destination Any, Destination port SSH 22, Position At the end. Click "OK".
-  3. Add Entry: Action Deny, Protocol TCP, Source Any, Destination Any, Destination port SSH 22.
-  4. Add Entry: Action Permit, Protocol IP (any protocol), Source Any, Destination Any, so other traffic still passes. It shows "Very broad": expected here, as the last entry.
-  5. In Interfaces, click "Apply List", enter `eth0`, choose 100, and click "OK".
-  6. Check it on the Effective Policy tab: choose eth0, open "Test a packet", click SSH, and enter a source outside `192.168.1.0/24` and a destination address of the device: it should say Dropped, by entry 20 of list 100.
-  7. Click "Save Config".
-- Block one malicious host on eth0 with a standard list: create list 10, add an entry with Action Deny and Source Host `203.0.113.66`, apply list 10 to eth0, and click "Save Config". Other traffic still goes through, since a standard list only drops what it denies.
+- Allow SSH only from the office network `192.168.1.0/24`, and the console, on eth0:
+  1. Under Lists not in use, click "New List", choose "Allow services", keep "Basic protection (recommended)", enter the Management network `192.168.1.0/24`, and click "Create list with 5 entries".
+  2. On that list, click "Apply to an interface", enter `eth0`, choose the new list in Stage 2, and click "Apply".
+  3. On the eth0 tab, open "Test a packet", click SSH, and enter a source outside `192.168.1.0/24` and a destination address of the device: it should say Dropped, by the implicit deny. A source inside it should say Passed.
+  4. Click "Save Config".
+- Block one malicious host on eth0: on the eth0 tab, in Stage 1 click "Add Entry" (or "Add a standard list" first if there is none), keep Deny (block) and Host, enter `203.0.113.66`, and click "Add Entry". Then "Save Config". Other traffic is unaffected, since a standard list only drops what it denies.
 
 ## Saving the configuration
 
@@ -149,7 +170,7 @@ Above the Effective Policy table, click "Test a packet" to open it (it stays ope
 
 ## Common questions
 
-- I added an entry but the traffic isn't blocked. Check that an interface applies the list (Interfaces); that no permit entry with a lower Seq in the same list matches the traffic first; that the addresses, protocol and port are right; and that the ACL Engine card says "Enforced". Watch whether "Dropped (packets)" goes up.
+- I added an entry but the traffic isn't blocked. Open the interface's tab: its status must say "Enforced", and the list must be shown in a stage there (a list under Lists not in use does nothing). Use "Test a packet" with the traffic's addresses and ports to see which entry decides; look for "Never matches" notes; check the interface name isn't "Not on this device".
 - All my traffic is blocked after I applied an extended list. In an extended list, traffic that matches no entry is dropped, so end the list with a permit entry for the rest, such as `permit ip any any`. A standard list doesn't do this: it only drops what it denies.
 - I can't see the access lists. Your account is a user, not an administrator; only administrators can view or change them.
 - My rules were gone after the device restarted. The changes weren't saved with "Save Config". Ask an administrator to save after making changes.

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { ipToInt, parseAceRule } from './ace'
+import { ipToInt, parseAddrLines, parseAddress, parseAceRule, stdAce } from './ace'
 import {
-  KEY_IMPLICIT_DENY, KEY_NO_EXT, covers, entryKey, evaluate, isVeryBroad, policyRows, positionOptions,
-  shadowingEntry, type Packet,
+  KEY_IMPLICIT_DENY, KEY_NO_EXT, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
+  nextFreeList, permitsTcpPort, placeEntries, policyRows, positionAfter, positionOptions, shadowingEntry,
+  type Packet,
 } from './policy'
 import type { AclEntry, DeviceConfig } from './types'
 
@@ -143,40 +144,100 @@ describe('evaluate', () => {
 describe('policyRows', () => {
   it('lists both stages in order, with the implicit rows', () => {
     const rows = policyRows(cfg, 'eth0')
-    expect(rows.map((r) => (r.kind === 'entry' ? `${r.n}:${r.acl}/${r.seq}` : r.kind))).toEqual([
-      'header', '1:10/10', '2:10/20', '3:10/30', 'implicit',
-      'header', '4:100/10', '5:100/20', '6:100/30', '7:100/40', '8:100/50', '9:100/60', 'implicit',
+    expect(rows.map((r) => (r.kind === 'entry' ? `${r.acl}/${r.seq}` : r.kind))).toEqual([
+      'stage', '10/10', '10/20', '10/30', 'implicit',
+      'stage', '100/10', '100/20', '100/30', '100/40', '100/50', '100/60', 'implicit',
     ])
     expect(rows.at(-1)).toMatchObject({ key: KEY_IMPLICIT_DENY, result: 'Drop (implicit)' })
   })
 
-  it('marks a standard permit with no deny after it as having no effect, and one before a deny as exempting', () => {
+  it('marks a standard permit with no deny after it as having no effect, and not one before a deny', () => {
     const noEffect = policyRows(cfg, 'eth0').find((r) => r.kind === 'entry' && r.seq === 30 && r.acl === 10)
-    expect(noEffect).toMatchObject({ note: expect.stringMatching(/^No effect/) })
+    expect(noEffect).toMatchObject({ note: { text: expect.stringMatching(/^No effect/), kind: 'muted' } })
     const c = config({ e: [10] }, { 10: ['permit host 198.51.100.7', 'deny 198.51.100.0/24'] })
-    expect(policyRows(c, 'e').find((r) => r.kind === 'entry')).toMatchObject({ note: expect.stringMatching(/^Exempts/) })
+    expect(policyRows(c, 'e').find((r) => r.kind === 'entry')).toMatchObject({ note: undefined })
   })
 
-  it('says stage 2 passes everything when no extended list is bound', () => {
-    expect(policyRows(cfg, 'eth1').at(-1)).toMatchObject({ key: KEY_NO_EXT, result: 'Pass' })
+  it('marks an entry an earlier one covers as never matching', () => {
+    const notes = entryNotes(
+      [{ seq: 10, ace: 'permit tcp any any' }, { seq: 20, ace: 'deny tcp host 192.0.2.1 any eq 22' }, { seq: 30, ace: 'deny udp any any' }],
+      false,
+    )
+    expect(notes).toEqual([undefined, { text: 'Never matches: seq 10 covers it', kind: 'warn' }, undefined])
+  })
+
+  it('heads stage 2 with "everything passes" when no extended list is bound', () => {
+    expect(policyRows(cfg, 'eth1').at(-1)).toMatchObject({ kind: 'stage', key: KEY_NO_EXT, acl: null })
+    expect(policyRows(cfg, 'eth2')[0]).toMatchObject({ kind: 'stage', acl: null, text: 'Stage 1 · No standard list' })
   })
 })
 
-describe('positionOptions', () => {
+describe('positions', () => {
   const list = (...seqs: number[]): AclEntry[] => seqs.map((seq) => ({ seq, ace: 'permit any' }))
 
   it('offers the top, every gap and the end', () => {
-    expect(positionOptions(list(10, 20, 21)).map((o) => [o.label, o.seq])).toEqual([
-      ['At the top', 5],
-      ['After seq 10, before 20', 15],
+    expect(positionOptions(list(10, 20, 21)).map((o) => [o.label, o.seqs])).toEqual([
+      ['At the top', [5]],
+      ['After seq 10, before 20', [15]],
       ['After seq 20, before 21', null],
-      ['At the end', 31],
+      ['At the end', [31]],
     ])
   })
 
+  it('spreads several entries, and refuses a gap too small for them', () => {
+    const o = positionOptions(list(10, 20), 3)
+    expect(o.map((x) => x.seqs)).toEqual([[2, 4, 6], [12, 14, 16], [30, 40, 50]])
+    expect(positionOptions(list(10, 13), 3)[1].seqs).toBeNull()
+  })
+
   it('has no top below seq 2, and starts an empty list at 10', () => {
-    expect(positionOptions(list(1))[0].seq).toBeNull()
-    expect(positionOptions([])).toEqual([{ key: 'end', label: 'At the end', seq: 10 }])
+    expect(positionOptions(list(1))[0].seqs).toBeNull()
+    expect(positionOptions([], 2)).toEqual([{ key: 'end', label: 'At the end', seqs: [10, 20] }])
+  })
+
+  it('puts a standard entry before the first one matching every source, by default', () => {
+    expect(defaultStdPosition(cfg.acls[10])).toBe('after-20')
+    expect(defaultStdPosition([{ seq: 10, ace: 'permit any' }])).toBe('top')
+    expect(defaultStdPosition([{ seq: 10, ace: 'deny host 192.0.2.1' }])).toBe('end')
+  })
+
+  it('inserts below an entry, and places new entries in order', () => {
+    expect(positionAfter(list(10, 20), 10)).toBe('after-10')
+    expect(positionAfter(list(10, 20), 20)).toBe('end')
+    expect(placeEntries(list(10, 20), [{ seq: 15, ace: 'x' }]).map((e) => [e.seq, e.isNew])).toEqual([
+      [10, false], [15, true], [20, false],
+    ])
+  })
+})
+
+describe('addresses and list numbers', () => {
+  it('reads one address, network or any, and names the network when host bits are set', () => {
+    expect(parseAddress('192.0.2.7').net).toEqual({ net: ip('192.0.2.7'), prefix: 32 })
+    expect(parseAddress('host 192.0.2.7').net?.prefix).toBe(32)
+    expect(parseAddress('198.51.100.0/24').net?.prefix).toBe(24)
+    expect(parseAddress('any').net?.prefix).toBe(0)
+    expect(parseAddress('192.168.1.5/24').error).toBe('192.168.1.5/24 has host bits set; the network is 192.168.1.0/24')
+    expect(parseAddress('300.1.1.1').error).toMatch(/not an IPv4/)
+  })
+
+  it('reads one source per line, with line numbers for errors', () => {
+    const r = parseAddrLines('192.0.2.7\n\n# office\n10.0.0.0/8\nbogus\n')
+    expect(r.items.map((i) => [i.line, i.text])).toEqual([[1, '192.0.2.7'], [4, '10.0.0.0/8']])
+    expect(r.errors).toMatchObject([{ line: 5, text: 'bogus' }])
+    expect(stdAce('deny', r.items[0].net)).toBe('deny host 192.0.2.7')
+    expect(stdAce('deny', r.items[1].net)).toBe('deny 10.0.0.0/8')
+  })
+
+  it('suggests the next free list number, by tens first', () => {
+    expect(nextFreeList(cfg, true)).toBe(20)
+    expect(nextFreeList(cfg, false)).toBe(110)
+  })
+
+  it('knows whether a list lets in new TCP connections to a port', () => {
+    expect(permitsTcpPort(cfg.acls[100], 443)).toBe(true)
+    expect(permitsTcpPort(cfg.acls[100], 8443)).toBe(false) // only "established" would match
+    expect(permitsTcpPort([{ seq: 10, ace: 'permit ip any any' }], 8443)).toBe(true)
+    expect(permitsTcpPort([], 8443)).toBe(false)
   })
 })
 

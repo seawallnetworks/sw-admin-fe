@@ -3,7 +3,7 @@
 
 import { getToken } from './auth'
 import { ApiError } from './types'
-import type { AclEngine, AclEntry, DashboardData, DeviceConfig, EventType, RequestOptions } from './types'
+import type { AclEngine, AclEngineState, AclEntry, DashboardData, DeviceConfig, EventType, RequestOptions } from './types'
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
 
@@ -31,8 +31,14 @@ const mock = {
       { seq: 50, ace: 'permit udp any any eq 53' },
       { seq: 60, ace: 'permit icmp any any' },
     ],
+    // not applied anywhere: under "Lists not in use"
+    '20': [
+      { seq: 10, ace: 'deny host 192.0.2.99' },
+      { seq: 20, ace: 'deny 100.64.0.0 0.63.255.255' },
+    ],
+    // applied only on eth9, which isn't on the device
     '110': [{ seq: 10, ace: 'deny ip 192.0.2.0 0.0.0.255 any' }],
-    // empty: applying it shows the "drops ALL incoming traffic" warning
+    // empty: applying it shows the "Everything will be dropped" warning
     '120': [],
   } as Record<string, AclEntry[]>,
   interfaces: {
@@ -41,6 +47,8 @@ const mock = {
     eth9: { acls_in: [110] },
   } as Record<string, { acls_in: number[] }>,
   counters: { xdp_pass: 18342, xdp_drop: 211 },
+  /** The engine state to report; 'auto' is applied, or pending just after a change. */
+  engineState: 'auto' as AclEngineState | 'auto',
 }
 
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
@@ -70,6 +78,10 @@ const unchanged = () => ({ generation: mock.generation })
   const list = mock.acls['100']
   list.unshift({ seq: Math.max(1, (list[0]?.seq ?? 10) - 5), ace: 'deny tcp host 198.51.100.7 any' })
   changed()
+}
+
+;(globalThis as { mockEngineState?: (s: string) => void }).mockEngineState = (s) => {
+  mock.engineState = s as AclEngineState | 'auto'
 }
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
@@ -198,18 +210,25 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     return changed()
   }],
   ['GET', /^\/acl-engine$/, (): AclEngine => {
-    const pending = Date.now() - mock.changedAt < 3000
+    // the Mock engine state select on the Access Lists page sets engineState
+    const state: AclEngineState =
+      mock.engineState !== 'auto' ? mock.engineState : Date.now() - mock.changedAt < 3000 ? 'pending' : 'applied'
+    const since = Math.floor((state === 'pending' ? mock.changedAt || Date.now() : mock.loginAt - 3_600_000) / 1000)
+    const names = Object.keys(mock.interfaces)
+    // eth9 doesn't exist; an interface added in the mock does, unless its name starts with "x"
+    const exists = (n: string) => n !== 'eth9' && !n.startsWith('x')
+    const base = { state, since, socket: '/run/mfwd.sock' as string | null }
+    if (state === 'off') return { ...base, socket: null, live: false }
+    if (state === 'unreachable') return { ...base, live: false }
     mock.counters.xdp_pass += rand(500, 5000)
     mock.counters.xdp_drop += rand(0, 200)
-    const names = Object.keys(mock.interfaces)
     return {
-      state: pending ? 'pending' : 'applied',
-      since: Math.floor((pending ? mock.changedAt : mock.loginAt - 3_600_000) / 1000),
-      socket: '/run/mfwd.sock',
-      ...(pending ? {} : { config_generation: mock.generation, mfwd_generation: mock.generation + 3 }),
+      ...base,
+      ...(state === 'refused' ? { error: 'access list 100, entry 30: rule table full (mfwd: E2BIG)' } : {}),
+      ...(state === 'applied' ? { config_generation: mock.generation, mfwd_generation: mock.generation + 3 } : {}),
       live: true,
-      attached: names.filter((n) => n !== 'eth9'),
-      missing: names.filter((n) => n === 'eth9'),
+      attached: names.filter(exists),
+      missing: names.filter((n) => !exists(n)),
       counters: { ...mock.counters },
     }
   }],

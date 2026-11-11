@@ -1,13 +1,16 @@
 <script setup lang="ts">
-// "Test a packet": describe a packet, see which row of the Effective Policy decides for it.
+// "Test a packet": describe a packet, see which row of the policy table decides for it.
 // The verdict comes from src/policy.ts, which mirrors mini-fw; the device isn't asked.
 import { computed, reactive, ref, watch } from 'vue'
 import { NButton, NFormItem, NInput, NInputNumber, NSelect, NSpace, NTag } from 'naive-ui'
 import { ipToInt } from '../ace'
 import { evaluate, type Packet, type PacketState, type Verdict } from '../policy'
 import type { DeviceConfig } from '../types'
+import { statusCertainty, type IfaceStatus } from '../aclPage'
 
-const props = defineProps<{ config: DeviceConfig['config']; iface: string }>()
+const props = defineProps<{ config: DeviceConfig['config']; iface: string; status: IfaceStatus }>()
+/** Whether the verdict is what the device does now, may still be the previous lists, or isn't in force. */
+const certainty = computed(() => statusCertainty(props.status))
 /** The verdict, or null while collapsed or incomplete: the table highlights its row. */
 const emit = defineEmits<{ verdict: [Verdict | null] }>()
 
@@ -201,14 +204,23 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
 
       <div class="result" aria-live="polite">
         <template v-if="typeof packet === 'string'">
-          <NTag size="small">Incomplete</NTag>
-          <span class="muted">Enter {{ packet }}.</span>
+          <span class="muted">Incomplete — enter {{ packet }}.</span>
+        </template>
+        <template v-else-if="verdict && certainty === 'not'">
+          <NTag size="small">Not filtered</NTag>
+          <span>
+            Once enforced: <strong :class="`res-${verdict.result}`">{{ verdict.result === 'pass' ? 'passed' : 'dropped' }}</strong>.
+            {{ verdict.text }}
+          </span>
         </template>
         <template v-else-if="verdict">
           <NTag size="small" :type="verdict.result === 'pass' ? 'success' : 'error'">
             {{ verdict.result === 'pass' ? 'Passed' : 'Dropped' }}
           </NTag>
-          <span>{{ verdict.text }}</span>
+          <span>
+            {{ verdict.text }}
+            <span v-if="certainty === 'maybe'" class="muted">(may still be the previous lists)</span>
+          </span>
         </template>
       </div>
     </div>
@@ -266,5 +278,11 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
 }
 .muted {
   color: #888;
+}
+.res-drop {
+  color: #d03050;
+}
+.res-pass {
+  color: #18a058;
 }
 </style>
