@@ -9,7 +9,7 @@ export const router = createRouter({
     { path: '/login', component: () => import('./views/Login.vue'), meta: { title: 'Log In', public: true } },
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: 'Dashboard', help: ['Dashboard'] } },
-    { path: '/acl', component: () => import('./views/AclRules.vue'), meta: { title: 'ACL Rules', help: ['ACL Rules', 'Saving the configuration', 'Common questions'] } },
+    { path: '/acl', component: () => import('./views/AccessLists.vue'), meta: { title: 'Access Lists', help: ['Access Lists', 'Saving the configuration', 'Common questions'] } },
     { path: '/ddos', component: placeholder, meta: { title: 'DDoS Protection' } },
     { path: '/http-flood', component: placeholder, meta: { title: 'HTTP Flood' } },
     { path: '/cc', component: placeholder, meta: { title: 'CC Protection' } },

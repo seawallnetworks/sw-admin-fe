@@ -3,7 +3,7 @@
 
 import { getToken } from './auth'
 import { ApiError } from './types'
-import type { AclRule, AclRuleInput, DashboardData, EventType, Protocol, RequestOptions } from './types'
+import type { AclEngine, AclEntry, DashboardData, DeviceConfig, EventType, RequestOptions } from './types'
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
 
@@ -14,34 +14,53 @@ const mock = {
   loginAt: Date.now(),
   /** Whether a change was made since the last save; the real backend compares running and startup. */
   dirty: false,
-  nextId: 1,
-  rules: [] as AclRule[],
-}
-
-function portless(p: Protocol) {
-  return p === 'icmp' || p === 'any'
-}
-
-{
-  const names = ['Office network', 'Ops jump host', 'Overseas scanners', 'Database access', 'DNS service', 'SSH allowlist', 'Malicious range', 'Monitoring probes']
-  const protos: Protocol[] = ['tcp', 'udp', 'icmp', 'any']
-  for (let i = 0; i < 57; i++) {
-    const protocol = protos[i % 4]
-    mock.rules.push({
-      id: mock.nextId++,
-      priority: (i + 1) * 10,
-      name: `${names[i % names.length]} ${Math.floor(i / names.length) + 1}`,
-      source: `${10 + (i % 180)}.${(i * 37) % 256}.${(i * 11) % 256}.0/24`,
-      protocol,
-      port: portless(protocol) ? null : String([22, 53, 80, 443, 3306, 8080][i % 6]),
-      action: i % 3 === 0 ? 'allow' : 'deny',
-      hits: Math.floor(Math.random() * 100000),
-      enabled: i % 7 !== 0,
-    })
-  }
+  generation: 4,
+  /** When the last change was made; the engine shows `pending` for a moment after it. */
+  changedAt: 0,
+  acls: {
+    '10': [
+      { seq: 10, ace: 'deny host 203.0.113.66' },
+      { seq: 20, ace: 'deny 198.51.100.0 0.0.0.255' },
+      { seq: 30, ace: 'permit any' },
+    ],
+    '100': [
+      { seq: 10, ace: 'permit tcp 192.168.1.0 0.0.0.255 any eq 22' },
+      { seq: 20, ace: 'deny tcp any any eq 22' },
+      { seq: 30, ace: 'permit tcp any host 10.0.0.5 eq 443' },
+      { seq: 40, ace: 'permit tcp any any established' },
+      { seq: 50, ace: 'permit udp any any eq 53' },
+      { seq: 60, ace: 'permit icmp any any' },
+    ],
+    '110': [{ seq: 10, ace: 'deny ip 192.0.2.0 0.0.0.255 any' }],
+  } as Record<string, AclEntry[]>,
+  interfaces: {
+    eth0: { acls_in: [10, 100] },
+    // applies a list but doesn't exist, so the engine lists it as missing
+    eth9: { acls_in: [110] },
+  } as Record<string, { acls_in: number[] }>,
+  counters: { xdp_pass: 18342, xdp_drop: 211 },
 }
 
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
+
+const invalid = (msg: string) => new ApiError(400, 'invalid', msg)
+const isStandard = (acl: number) => acl < 100
+
+/** A list number from a body or query value, checked as the device does. */
+function aclNumber(v: unknown): number {
+  const acl = Number(v)
+  if (!Number.isInteger(acl) || acl < 1 || acl > 199) throw invalid('access list number must be 1 to 199')
+  return acl
+}
+
+/** Records a change; the reply carries the new generation. */
+function changed(extra: object = {}) {
+  mock.dirty = true
+  mock.changedAt = Date.now()
+  return { ...extra, generation: ++mock.generation }
+}
+
+const unchanged = () => ({ generation: mock.generation })
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
   ['POST', /^\/session$/, (_, { body }) => {
@@ -72,7 +91,9 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     return {
       inbound_pps: last.inbound_pps,
       dropped_pps: last.dropped_pps,
-      active_acl_rules: mock.rules.filter((r) => r.enabled).length,
+      active_acl_rules: Object.values(mock.interfaces)
+        .flatMap((i) => i.acls_in)
+        .reduce((n, acl) => n + (mock.acls[acl]?.length ?? 0), 0),
       syn_protection: true,
       traffic,
       events: Array.from({ length: 10 }, () => ({
@@ -84,25 +105,97 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       })),
     } satisfies DashboardData
   }],
-  ['GET', /^\/acl\/rules$/, () => [...mock.rules].sort((a, b) => a.priority - b.priority)],
-  ['POST', /^\/acl\/rules$/, (_, { body }) => {
-    const rule: AclRule = { ...(body as AclRuleInput), id: mock.nextId++, hits: 0 }
-    if (portless(rule.protocol)) rule.port = null
-    mock.rules.push(rule)
-    mock.dirty = true
-    return rule
+  ['GET', /^\/config$/, (): DeviceConfig => ({
+    generation: mock.generation,
+    config: { hostname: 'sw1', interfaces: mock.interfaces, acls: mock.acls, voidGate: {}, feed: {} },
+  })],
+  ['POST', /^\/acl\/entry$/, (_, { body }) => {
+    const b = body as { acl: unknown; ace: unknown; seq?: unknown }
+    const acl = aclNumber(b.acl)
+    // the device writes an entry in its own form; the mock only squeezes the spaces
+    const ace = String(b.ace ?? '').trim().replace(/\s+/g, ' ')
+    const words = ace.split(' ')
+    if (words[0] !== 'permit' && words[0] !== 'deny') throw invalid(`"${ace}": must start with permit or deny`)
+    if (words.length < 2) throw invalid(`"${ace}": missing the source`)
+    if (!isStandard(acl) && words.length < 4) {
+      throw invalid(`"${ace}": an extended entry needs a protocol, a source and a destination`)
+    }
+    const list = (mock.acls[acl] ??= [])
+    let seq: number
+    if (b.seq === undefined) {
+      seq = (list.at(-1)?.seq ?? 0) + 10
+    } else {
+      seq = Number(b.seq)
+      if (!Number.isInteger(seq) || seq < 1 || seq > 65535) throw invalid('sequence must be 1 to 65535')
+      if (list.some((e) => e.seq === seq)) throw invalid(`access list ${acl} already has sequence ${seq}`)
+    }
+    list.push({ seq, ace })
+    list.sort((x, y) => x.seq - y.seq)
+    return changed({ seq })
   }],
-  ['PUT', /^\/acl\/rules\/(\d+)$/, (m, { body }) => {
-    const rule = mock.rules.find((r) => r.id === Number(m[1]))
-    if (!rule) throw new ApiError(404, 'invalid', 'no such rule')
-    Object.assign(rule, body)
-    if (portless(rule.protocol)) rule.port = null
-    mock.dirty = true
-    return rule
+  ['DELETE', /^\/acl\/entry$/, (_, { query }) => {
+    const acl = aclNumber(query?.acl)
+    const list = mock.acls[acl]
+    if (!list) throw invalid(`access list ${acl} does not exist`)
+    const i = list.findIndex((e) => e.seq === Number(query?.seq))
+    if (i < 0) throw invalid(`access list ${acl} has no sequence ${query?.seq}`)
+    const [entry] = list.splice(i, 1)
+    return changed({ seq: entry.seq })
   }],
-  ['DELETE', /^\/acl\/rules\/(\d+)$/, (m) => {
-    mock.rules = mock.rules.filter((r) => r.id !== Number(m[1]))
-    mock.dirty = true
+  ['POST', /^\/acl$/, (_, { body }) => {
+    const acl = aclNumber((body as { acl: unknown }).acl)
+    if (mock.acls[acl]) return unchanged()
+    mock.acls[acl] = []
+    return changed()
+  }],
+  ['DELETE', /^\/acl$/, (_, { query }) => {
+    const acl = aclNumber(query?.acl)
+    if (!mock.acls[acl]) throw invalid(`access list ${acl} does not exist`)
+    const user = Object.entries(mock.interfaces).find(([, i]) => i.acls_in.includes(acl))
+    if (user) throw invalid(`access list ${acl} is applied to ${user[0]}; remove it there first`)
+    delete mock.acls[acl]
+    return changed()
+  }],
+  ['POST', /^\/interface\/acl$/, (_, { body }) => {
+    const b = body as { interface: unknown; acl: unknown }
+    const name = String(b.interface ?? '')
+    if (!/^[A-Za-z0-9_.-]{1,15}$/.test(name)) throw invalid(`"${name}" is not an interface name`)
+    const acl = aclNumber(b.acl)
+    const iface = (mock.interfaces[name] ??= { acls_in: [] })
+    if (iface.acls_in.includes(acl)) return unchanged()
+    // at most one standard and one extended list: this one replaces its kind
+    iface.acls_in = [...iface.acls_in.filter((a) => isStandard(a) !== isStandard(acl)), acl].sort((x, y) => x - y)
+    return changed()
+  }],
+  ['DELETE', /^\/interface\/acl$/, (_, { query }) => {
+    const name = String(query?.interface ?? '')
+    const acl = aclNumber(query?.acl)
+    const iface = mock.interfaces[name]
+    if (!iface?.acls_in.includes(acl)) throw invalid(`${name} does not apply access list ${acl}`)
+    iface.acls_in = iface.acls_in.filter((a) => a !== acl)
+    return changed()
+  }],
+  ['DELETE', /^\/interface$/, (_, { query }) => {
+    const name = String(query?.interface ?? '')
+    if (!mock.interfaces[name]) throw invalid(`${name} has no configuration`)
+    delete mock.interfaces[name]
+    return changed()
+  }],
+  ['GET', /^\/acl-engine$/, (): AclEngine => {
+    const pending = Date.now() - mock.changedAt < 3000
+    mock.counters.xdp_pass += rand(500, 5000)
+    mock.counters.xdp_drop += rand(0, 200)
+    const names = Object.keys(mock.interfaces)
+    return {
+      state: pending ? 'pending' : 'applied',
+      since: Math.floor((pending ? mock.changedAt : mock.loginAt - 3_600_000) / 1000),
+      socket: '/run/mfwd.sock',
+      ...(pending ? {} : { config_generation: mock.generation, mfwd_generation: mock.generation + 3 }),
+      live: true,
+      attached: names.filter((n) => n !== 'eth9'),
+      missing: names.filter((n) => n === 'eth9'),
+      counters: { ...mock.counters },
+    }
   }],
   ['GET', /^\/config\/pending$/, () => ({ dirty: mock.dirty })],
   ['POST', /^\/config\/save$/, () => {

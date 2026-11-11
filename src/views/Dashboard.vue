@@ -115,7 +115,7 @@ const eventColumns: DataTableColumns<BlockedEvent> = [
     </NGi>
     <NGi span="4 m:2 l:1">
       <NCard>
-        <NStatistic label="Active ACL Rules" :value="data ? data.active_acl_rules : '-'" />
+        <NStatistic label="Active ACL Entries" :value="data ? data.active_acl_rules : '-'" />
       </NCard>
     </NGi>
     <NGi span="4 m:2 l:1">

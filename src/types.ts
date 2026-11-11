@@ -3,23 +3,52 @@
 // Field names and values as docs/api.md (in lua-resty-sw-admin) has them: snake_case names,
 // lowercase enum values, timestamps in Unix epoch seconds. Labels for display are the views' job.
 
-export type AclAction = 'allow' | 'deny'
-export type Protocol = 'tcp' | 'udp' | 'icmp' | 'any'
-
-export interface AclRule {
-  id: number
-  priority: number
-  name: string
-  source: string
-  protocol: Protocol
-  /** "443" or "8000-8080"; null for any port, and always null for icmp and any. */
-  port: string | null
-  action: AclAction
-  hits: number
-  enabled: boolean
+/** An access list's entry. `ace` is the rule in Cisco syntax, as the device writes it. */
+export interface AclEntry {
+  seq: number
+  ace: string
 }
 
-export type AclRuleInput = Omit<AclRule, 'id' | 'hits'>
+export interface DeviceConfig {
+  /** Counts changes to the running configuration; only in the `running` reply. */
+  generation?: number
+  config: {
+    hostname: string
+    /** By Linux interface name; `acls_in` are the lists applied to incoming traffic, sorted. */
+    interfaces: Record<string, { acls_in: number[] }>
+    /** By list number, as a string: 1-99 standard, 100-199 extended. Entries sorted by `seq`. */
+    acls: Record<string, AclEntry[]>
+    voidGate: object
+    feed: object
+  }
+}
+
+/** Every change call's reply; deleting or adding an entry also gives its `seq`. */
+export interface ChangeReply {
+  generation: number
+  seq?: number
+}
+
+export type AclEngineState = 'applied' | 'pending' | 'unreachable' | 'refused' | 'off'
+
+export interface AclEngine {
+  state: AclEngineState
+  /** When it entered `state`, epoch seconds. */
+  since: number
+  /** null when `off`. */
+  socket: string | null
+  /** Why mfwd refused it, when `refused`. */
+  error?: string
+  /** Only when `applied`. */
+  config_generation?: number
+  mfwd_generation?: number
+  /** mfwd answered just now; only then are there `attached` and `counters`. */
+  live: boolean
+  attached?: string[]
+  /** Interfaces that apply a list but don't exist on the device. */
+  missing?: string[]
+  counters?: Record<string, number>
+}
 
 export type EventType = 'acl_deny' | 'syn_flood' | 'http_flood' | 'cc' | 'brute_force'
 
@@ -34,6 +63,7 @@ export interface BlockedEvent {
 export interface DashboardData {
   inbound_pps: number
   dropped_pps: number
+  /** Entries in the access lists that interfaces apply. */
   active_acl_rules: number
   syn_protection: boolean
   /** Oldest first, one point every 5 seconds. */

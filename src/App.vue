@@ -16,7 +16,7 @@ const isPublic = computed(() => route.meta.public)
 
 const menuItems: [string, string, Component][] = [
   ['/dashboard', 'Dashboard', DashboardIcon],
-  ['/acl', 'ACL Rules', AclIcon],
+  ['/acl', 'Access Lists', AclIcon],
   ['/ddos', 'DDoS Protection', DdosIcon],
   ['/http-flood', 'HTTP Flood', HttpFloodIcon],
   ['/cc', 'CC Protection', CcIcon],

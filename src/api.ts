@@ -3,7 +3,7 @@ import { createDiscreteApi } from 'naive-ui'
 import { router } from './router'
 import { clearSession, getRole, getSession, getToken, setSession, type Session } from './auth'
 import { ApiError } from './types'
-import type { AclRule, AclRuleInput, DashboardData, RequestOptions, Role } from './types'
+import type { AclEngine, ChangeReply, DashboardData, DeviceConfig, RequestOptions, Role } from './types'
 
 export * from './types'
 export { getRole, getToken, getUsername } from './auth'
@@ -90,6 +90,10 @@ async function request<T>(method: string, path: string, opts: RequestOptions = {
       // the token expired or was ended
       message.warning('Your session has expired. Please log in again.')
       endSession()
+    } else if (err.status === 502) {
+      message.error("The device isn't responding. Please try again.")
+    } else if (err.status === 503) {
+      message.error('The device is busy. Please try again in a few seconds.')
     } else {
       message.error(err.message)
     }
@@ -121,8 +125,8 @@ async function fetchRequest<T>(method: string, path: string, { query, body }: Re
 const get = <T>(path: string, query?: RequestOptions['query'], silent?: boolean) =>
   request<T>('GET', path, { query, silent })
 const post = <T>(path: string, body?: unknown, silent?: boolean) => request<T>('POST', path, { body, silent })
-const put = <T>(path: string, body?: unknown) => request<T>('PUT', path, { body })
-const del = <T>(path: string) => request<T>('DELETE', path)
+/** A DELETE takes its arguments in the query, with no body. */
+const del = <T>(path: string, query?: RequestOptions['query']) => request<T>('DELETE', path, { query })
 
 // ---------- endpoints ----------
 
@@ -164,11 +168,25 @@ export function ensureSession(): Promise<boolean> {
 
 export const fetchDashboard = () => get<DashboardData>('/dashboard')
 
-/** All rules in one call; the ACL page filters and pages them in the browser. */
-export const listAclRules = () => get<AclRule[]>('/acl/rules')
-export const createAclRule = (rule: AclRuleInput) => post<AclRule>('/acl/rules', rule)
-export const updateAclRule = (id: number, patch: Partial<AclRuleInput>) => put<AclRule>(`/acl/rules/${id}`, patch)
-export const deleteAclRule = (id: number) => del<void>(`/acl/rules/${id}`)
+// ---------- access lists and interfaces (admin only) ----------
+
+/** The configuration in effect; read it again after each change, as the device rewrites entries. */
+export const getConfig = () => get<DeviceConfig>('/config', { what: 'running' })
+
+/** Without `seq`, the entry goes after the last one (its seq + 10). Creates the list if it's missing. */
+export const addAclEntry = (acl: number, ace: string, seq?: number) =>
+  post<ChangeReply>('/acl/entry', seq === undefined ? { acl, ace } : { acl, ace, seq })
+export const deleteAclEntry = (acl: number, seq: number) => del<ChangeReply>('/acl/entry', { acl, seq })
+export const createAcl = (acl: number) => post<ChangeReply>('/acl', { acl })
+/** Refused while an interface applies the list. */
+export const deleteAcl = (acl: number) => del<ChangeReply>('/acl', { acl })
+/** Replaces the list of the same kind (standard or extended) the interface applied. */
+export const bindAcl = (iface: string, acl: number) => post<ChangeReply>('/interface/acl', { interface: iface, acl })
+export const unbindAcl = (iface: string, acl: number) => del<ChangeReply>('/interface/acl', { interface: iface, acl })
+export const deleteInterface = (iface: string) => del<ChangeReply>('/interface', { interface: iface })
+
+/** Whether the lists are enforced: mfwd's state and packet counters. */
+export const getAclEngine = (silent?: boolean) => get<AclEngine>('/acl-engine', undefined, silent)
 
 /** Asks whether there are unsaved changes. Admin only: for a `user` there is nothing to save. */
 export async function refreshPendingChanges() {

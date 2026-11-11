@@ -1,11 +1,11 @@
 # Seawall Admin Console User Manual
 
-> Seawall is a network protection device. The Admin Console is its web interface: watch traffic and blocked events, manage ACL (access control) rules, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
+> Seawall is a network protection device. The Admin Console is its web interface: watch traffic and blocked events, manage access lists (ACLs) and the interfaces that apply them, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
 
 ## For AI assistants
 
 - Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
-- Rule changes (add, edit, enable/disable, delete) take effect as soon as the user clicks "OK" or flips the switch, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
+- Access list changes (adding or deleting an entry or a list, applying a list to an interface or removing it) take effect as soon as the user clicks "OK" or confirms, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
 - If you don't know, say so, and suggest the user ask their device administrator.
 
 ## Logging in and out
@@ -22,14 +22,14 @@
 
 ## Layout
 
-- Menu on the left: Dashboard, ACL Rules, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
+- Menu on the left: Dashboard, Access Lists, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
 - Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only), the "Help" button and the user name menu.
 - "Help" opens a panel with the help for the current page. "Full manual" at the bottom of the panel shows this whole manual, and "This page" goes back.
 
 ## Roles
 
 - Administrator (admin): can use everything, and sees the "Save Config" button.
-- User (user): doesn't see "Save Config" or the "Unsaved changes" tag. Ask an administrator to save the configuration.
+- User (user): doesn't see "Save Config" or the "Unsaved changes" tag, and the Access Lists page says "Administrators only": only administrators can view or change the access lists.
 
 ## Dashboard
 
@@ -37,68 +37,85 @@ Shows the device's live state. It refreshes every 5 seconds (paused while the br
 
 - Inbound (pps): packets per second coming into the device now.
 - Dropped (pps): packets per second the device is blocking and dropping now.
-- Active ACL Rules: how many ACL rules are in effect.
+- Active ACL Entries: how many access list entries are in effect: the entries of the lists that interfaces apply.
 - SYN Protection: whether SYN flood protection is on ("On" or "Off").
 - Traffic: inbound and dropped traffic over time. Hover over the chart to see the values at a moment; click a legend entry to hide or show that line.
 - Recent Blocked Events: the latest blocked traffic, at most 10 entries, newest first. Columns: Time, Source IP, Type, Target, Action. Types: ACL deny, SYN Flood, HTTP Flood, CC attack, Brute force. The action is currently always "Drop".
 
-## ACL Rules
+## Access Lists
 
-ACL (access control list) rules allow or block traffic by source address, protocol and port.
+Access lists (ACLs) allow or block traffic, in the same numbered, Cisco-style form as the device's command line. The page has three parts: ACL Engine, Access Lists and Interfaces. Administrators only.
 
-### How rules match
+### How access lists work
 
-- Every rule has a "Priority" from 1 to 65535. Lower numbers are checked first, and the list is sorted by priority, lowest first.
-- Disabled rules are skipped.
-- To make an exception (for example, allow one host before denying its whole network), give the exception a lower priority number.
+- Each list has a number. Lists 1 to 99 are standard: they match only the source address. Lists 100 to 199 are extended: they match the protocol, source and destination addresses, and ports.
+- A list is made of entries. Each entry has a "Seq" (sequence number, 1 to 65535) and the rule itself, written in Cisco syntax, for example `permit tcp any any eq 22`.
+- Within a list, entries are checked in Seq order, lowest first, and the first entry that matches decides.
+- An interface applies lists to its incoming traffic: at most one standard and one extended list. A list does nothing until an interface applies it, and an interface that applies no list lets all traffic through.
+- A packet is checked against the standard list first, then the extended list:
+  - Standard list: deny drops the packet. permit, or no matching entry, moves on to the extended list; a standard permit does not skip the extended list. So a standard list works as a block list: traffic it doesn't deny goes on.
+  - Extended list: permit lets the packet through, deny drops it, and a packet that matches no entry is dropped (implicit deny). With no extended list applied, what the standard list didn't deny goes through.
+- Only IPv4 is filtered; other traffic (ARP, IPv6) always goes through.
+- The device checks every entry and may rewrite it in its own form, so an entry can look slightly different from what was typed. The list shows it as the device has it.
 
-### Viewing and finding rules
+### ACL Engine
 
-- Columns: Priority, Name, Source, Protocol / Port, Action (Allow / Deny), Hits, Enabled, Actions.
-- The note above the list is a reminder: rules are checked lowest priority number first, and changes need "Save Config" to be kept after a restart.
-- "Hits" counts the packets that matched the rule; use it to check that a rule is working.
-- The "Search name or source" box finds rules by name or source address.
-- The "All actions" drop-down shows only "Allow" or only "Deny" rules.
-- At the bottom of the list you can change pages and show 10, 20 or 50 rules per page.
+The engine is what enforces the access lists on traffic. The card refreshes every 5 seconds.
 
-### Adding a rule
+- The tag at the top right shows its state:
+  - Enforced: the lists shown on the page are in force.
+  - Applying: the latest change hasn't reached the engine yet; it normally becomes Enforced within seconds.
+  - Engine down: the engine isn't running; the device keeps retrying. Contact the administrator if it stays.
+  - Refused: the engine refused the configuration; the reason is shown below.
+  - Off: the device runs without the engine, so the lists aren't enforced.
+- "since" is when it entered that state.
+- Passed (packets) and Dropped (packets): the engine's packet counters, for all lists together. There are no counters per entry.
+- Interfaces filtered: the interfaces the engine is filtering now.
+- A warning such as "eth9 applies a list but doesn't exist on this device" means an interface in the configuration isn't on the device, so nothing is filtered there. Check the interface name.
 
-1. Click "Add Rule" above the list.
-2. Fill in:
-   - Name: a description to recognize it by, for example "Office network". Required.
-   - Priority: 1 to 65535, 100 by default. Lower numbers are checked first.
-   - Source: an IP address (IPv4 or IPv6) or a network in CIDR form, for example `192.168.1.10` or `192.168.1.0/24`. Required.
-   - Protocol: TCP, UDP, ICMP or ANY (any protocol).
-   - Port: the destination port, for example `80`, or a range such as `8000-8080`. Leave it empty for all ports. It can't be set when the protocol is ICMP or ANY.
-   - Action: Allow or Deny (Deny by default).
-   - Enabled: whether the rule is on right away (on by default).
-3. Click "OK". The rule takes effect at once.
-4. An administrator then clicks "Save Config" at the top right, or the rule is lost when the device restarts.
+### Access Lists
 
-### Editing, enabling or disabling, deleting
+- Each list has a tab with its number. Above the entries: whether it is standard or extended, and the interfaces that apply it.
+- Columns: Seq, Entry, Actions.
+- New List: click "New List" at the top right of the Access Lists card, enter a number from 1 to 199, and click "OK". The list starts empty. Creating a list that already exists changes nothing.
+- Add an entry: open the list's tab, click "Add Entry", type the entry, and click "OK". "Seq" is optional: leave it empty to add the entry after the last one (its Seq + 10). A Seq the list already has is refused.
+  - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network with a wildcard mask such as `198.51.100.0 0.0.0.255`.
+  - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`), a source, a destination, and optionally a port, for example `permit tcp 192.168.1.0 0.0.0.255 any eq 22`.
+- There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, give it a Seq between theirs (for example 15 between 10 and 20).
+- Delete an entry: click "Delete" on its row and confirm.
+- Delete a list: click "Delete List" on its tab and confirm. A list that an interface applies can't be deleted; remove it from the interface first.
+- If the device refuses a change, its reason is shown as it is, for example "access list 100 already has sequence 10" or "access list 100 is applied to eth0; remove it there first".
 
-- Edit: click "Edit" on the rule's row, change it, and click "OK".
-- Turn a rule off for a while: flip its switch in the "Enabled" column; no need to delete it.
-- Delete: click "Delete" on the row and confirm "Delete the rule "…"?". A deleted rule can't be brought back from the list; if the configuration hasn't been saved since, a device restart goes back to the last saved rules.
+### Interfaces
+
+- Columns: Interface, Lists applied (incoming), Actions. Next to the name, "Filtered" means the engine is filtering it now; "Not on this device" means no such interface exists.
+- Apply a list: click "Apply List" (on the interface's row, or at the top right of the card for an interface not listed yet), enter the interface name, for example `eth0`, choose the list, and click "OK". It replaces the list of the same kind (standard or extended) the interface applied.
+- Stop applying a list: click the × on its tag in "Lists applied" and choose "Remove".
+- Delete: click "Delete" on the row and confirm. The interface stops applying all its lists.
 
 ### Examples
 
-- Allow SSH (TCP port 22) only from the office network `192.168.1.0/24`:
-  1. Add a rule: Name "SSH allowlist", Priority 10, Source `192.168.1.0/24`, Protocol TCP, Port 22, Action Allow.
-  2. Add a rule: Name "Deny other SSH", Priority 20, Source `0.0.0.0/0`, Protocol TCP, Port 22, Action Deny.
-  3. Click "Save Config".
-- Block all traffic from a malicious network: add a rule with that network as the Source (for example `198.51.100.0/24`), Protocol ANY, Action Deny, then click "Save Config".
+- Allow SSH only from the office network `192.168.1.0/24`, on eth0:
+  1. Click "New List", enter 100 and click "OK".
+  2. On tab 100, click "Add Entry": `permit tcp 192.168.1.0 0.0.0.255 any eq 22`.
+  3. Add Entry: `deny tcp any any eq 22`.
+  4. Add Entry: `permit ip any any`, so other traffic still passes.
+  5. In Interfaces, click "Apply List", enter `eth0`, choose 100, and click "OK".
+  6. Click "Save Config".
+- Block one malicious host on eth0 with a standard list: create list 10, add `deny host 203.0.113.66`, apply list 10 to eth0, and click "Save Config". Other traffic still goes through, since a standard list only drops what it denies.
 
 ## Saving the configuration
 
-- Rule changes take effect at once but live only in the device's running state. The "Unsaved changes" tag in the header means the running configuration differs from the one the device loads when it starts.
+- Access list changes take effect at once but live only in the device's running state. The "Unsaved changes" tag in the header means the running configuration differs from the one the device loads when it starts.
 - "Save Config" saves the running configuration, so the device loads it at its next start, and the "Unsaved changes" tag goes away.
 - If you undo a change by hand, the tag goes away too, since the configuration matches the saved one again.
 - Only administrators can save the configuration.
 
 ## Common questions
 
-- I added a rule but the traffic isn't blocked. Check that the rule is enabled; that no "Allow" rule with a lower priority number matches the traffic first; and that the source, protocol and port are right. Watch whether its "Hits" go up.
+- I added an entry but the traffic isn't blocked. Check that an interface applies the list (Interfaces); that no permit entry with a lower Seq in the same list matches the traffic first; that the addresses, protocol and port are right; and that the ACL Engine card says "Enforced". Watch whether "Dropped (packets)" goes up.
+- All my traffic is blocked after I applied an extended list. In an extended list, traffic that matches no entry is dropped, so end the list with a permit entry for the rest, such as `permit ip any any`. A standard list doesn't do this: it only drops what it denies.
+- I can't see the access lists. Your account is a user, not an administrator; only administrators can view or change them.
 - My rules were gone after the device restarted. The changes weren't saved with "Save Config". Ask an administrator to save after making changes.
 - I can't see the "Save Config" button. Your account is a user, not an administrator; ask an administrator to save.
 - "Network error. Please try again later." The browser can't reach the device. Check your network connection and reload the page.
