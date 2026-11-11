@@ -101,31 +101,31 @@ async function forget() {
   padding: 8px 12px;
   margin-bottom: 12px;
   border-radius: 4px;
-  background: rgba(128, 128, 128, 0.08);
-  border-left: 4px solid #999;
+  background: var(--c-subtle-bg);
+  border-left: 4px solid var(--c-border-strong);
 }
 .st-enforced {
-  background: rgba(24, 160, 88, 0.08);
-  border-left-color: #18a058;
+  background: var(--c-success-tint);
+  border-left-color: var(--c-success);
 }
 .st-applying {
-  background: rgba(32, 128, 240, 0.08);
-  border-left-color: #2080f0;
+  background: var(--c-info-tint);
+  border-left-color: var(--c-info);
 }
 .st-down,
 .st-refused {
-  background: rgba(208, 48, 80, 0.08);
-  border-left-color: #d03050;
+  background: var(--c-error-tint-weak);
+  border-left-color: var(--c-error);
 }
 .st-missing {
-  background: rgba(240, 160, 32, 0.08);
-  border-left-color: #f0a020;
+  background: var(--c-warning-tint);
+  border-left-color: var(--c-warning);
 }
 .counters {
   font-variant-numeric: tabular-nums;
 }
 .muted {
-  color: #888;
+  color: var(--c-muted);
 }
 .small {
   font-size: 12px;

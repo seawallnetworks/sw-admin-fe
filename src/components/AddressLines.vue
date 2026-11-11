@@ -37,12 +37,12 @@ const errors = computed(() => parseAddrLines(text.value).errors)
 .errors {
   margin: 4px 0 0;
   padding-left: 18px;
-  color: #d03050;
+  color: var(--c-error-text);
   font-size: 12px;
 }
 .hint {
   margin-top: 4px;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 </style>

@@ -1,8 +1,9 @@
-import { ref } from 'vue'
-import { createDiscreteApi } from 'naive-ui'
+import { computed, ref } from 'vue'
+import { createDiscreteApi, darkTheme } from 'naive-ui'
 import { router } from './router'
 import { clearSession, getRole, getSession, getToken, setSession, type Session } from './auth'
 import { ApiError } from './types'
+import { isDark } from './theme'
 import type { AclEngine, ChangeReply, DashboardData, DeviceConfig, RequestOptions, Role } from './types'
 
 export * from './types'
@@ -19,7 +20,10 @@ const BASE = '/api'
 /** Warn this long before the token runs out. */
 const EXPIRY_WARNING_MS = 60_000
 
-const { message } = createDiscreteApi(['message'])
+// outside App.vue's NConfigProvider, so it is given the theme itself
+const { message } = createDiscreteApi(['message'], {
+  configProviderProps: computed(() => ({ theme: isDark.value ? darkTheme : null })),
+})
 
 // ---------- auth state ----------
 

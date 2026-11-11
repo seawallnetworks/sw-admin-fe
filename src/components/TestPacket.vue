@@ -236,7 +236,7 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
 <style scoped>
 .packet-test {
   margin-bottom: 12px;
-  border: 1px solid rgba(128, 128, 128, 0.25);
+  border: 1px solid var(--c-border);
   border-radius: 4px;
 }
 .toggle {
@@ -251,10 +251,10 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
   cursor: pointer;
 }
 .toggle:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: var(--c-subtle-bg);
 }
 .toggle:focus-visible {
-  outline: 2px solid #18a058;
+  outline: 2px solid var(--c-success);
   outline-offset: -2px;
 }
 .caret {
@@ -283,17 +283,17 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
   margin-top: 12px;
 }
 .muted {
-  color: #888;
+  color: var(--c-muted);
 }
 .hint {
   margin-top: 4px;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .res-drop {
-  color: #d03050;
+  color: var(--c-error-text);
 }
 .res-pass {
-  color: #18a058;
+  color: var(--c-success-text);
 }
 </style>

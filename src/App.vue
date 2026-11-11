@@ -3,13 +3,14 @@ import { computed, h, ref, watch, type Component } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NIcon, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
-  NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type MenuOption,
+  NMenu, NMessageProvider, NSpace, NTag, NTooltip, darkTheme, dateEnUS, enUS, type DropdownOption, type MenuOption,
 } from 'naive-ui'
 import HelpDrawer from './components/HelpDrawer.vue'
 import {
   AclIcon, BrandIcon, BruteForceIcon, CcIcon, DashboardIcon, DdosIcon, HttpFloodIcon, LogsIcon,
 } from './icons'
 import { getRole, getToken, getUsername, logout, refreshPendingChanges, saveConfig, unsavedChanges } from './api'
+import { isDark, setThemeMode, themeMode, type ThemeMode } from './theme'
 
 const route = useRoute()
 const isPublic = computed(() => route.meta.public)
@@ -56,14 +57,32 @@ async function onSave() {
   }
 }
 
-const userOptions = [{ key: 'logout', label: 'Log out' }]
+const THEMES: [ThemeMode, string][] = [
+  ['system', 'System'],
+  ['light', 'Light'],
+  ['dark', 'Dark'],
+]
+const userOptions = computed<DropdownOption[]>(() => [
+  {
+    key: 'theme',
+    label: 'Theme',
+    children: THEMES.map(([mode, label]) => ({
+      key: `theme:${mode}`,
+      // the current one is checked
+      label: `${themeMode.value === mode ? '✓' : '\u2003'} ${label}`,
+    })),
+  },
+  { type: 'divider', key: 'd1' },
+  { key: 'logout', label: 'Log out' },
+])
 function onUserSelect(key: string) {
   if (key === 'logout') logout()
+  else if (key.startsWith('theme:')) setThemeMode(key.slice(6) as ThemeMode)
 }
 </script>
 
 <template>
-  <NConfigProvider :locale="enUS" :date-locale="dateEnUS">
+  <NConfigProvider :theme="isDark ? darkTheme : null" :locale="enUS" :date-locale="dateEnUS">
     <NMessageProvider>
       <NDialogProvider>
         <RouterView v-if="isPublic" />
@@ -146,6 +165,6 @@ function onUserSelect(key: string) {
 }
 .content {
   height: calc(100vh - 56px);
-  background: #f5f7fa;
+  background: var(--c-page-bg);
 }
 </style>

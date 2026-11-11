@@ -146,54 +146,54 @@ const fill = (acl: number) => listFill(acl, page.entriesOf(acl).length)
 
 <style scoped>
 .stage td {
-  background: rgba(128, 128, 128, 0.08);
+  background: var(--c-subtle-bg);
 }
 .stage-title {
   font-weight: 600;
 }
 .implicit td {
   font-style: italic;
-  color: #888;
+  color: var(--c-muted);
 }
 .note {
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .fill {
   font-weight: normal;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .fill.near {
-  color: #f0a020;
+  color: var(--c-warning-text);
   font-weight: 600;
 }
 .note.warn {
-  color: #f0a020;
+  color: var(--c-warning-text);
 }
 .opt {
   margin-left: 6px;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .res-drop {
-  color: #d03050;
+  color: var(--c-error-text);
 }
 .res-pass {
-  color: #18a058;
+  color: var(--c-success-text);
 }
 .res-next {
-  color: #2080f0;
+  color: var(--c-info-text);
 }
 .ace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .armed td {
-  background: rgba(208, 48, 80, 0.06);
+  background: var(--c-error-tint-weak);
 }
 .explain td {
-  background: rgba(208, 48, 80, 0.06);
-  color: #d03050;
+  background: var(--c-error-tint-weak);
+  color: var(--c-error-text);
   font-size: 13px;
 }
 .cancel {
@@ -201,15 +201,15 @@ const fill = (acl: number) => listFill(acl, page.entriesOf(acl).length)
 }
 /* the row that decides for the tested packet: a tint and a 4px bar on the left */
 .policy .hit td {
-  background: rgba(208, 48, 80, 0.1);
+  background: var(--c-error-tint);
 }
 .policy .hit td:first-child {
-  box-shadow: inset 4px 0 0 #d03050;
+  box-shadow: inset 4px 0 0 var(--c-error);
 }
 .policy .hit-pass td {
-  background: rgba(24, 160, 88, 0.1);
+  background: var(--c-success-tint);
 }
 .policy .hit-pass td:first-child {
-  box-shadow: inset 4px 0 0 #18a058;
+  box-shadow: inset 4px 0 0 var(--c-success);
 }
 </style>

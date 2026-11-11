@@ -10,6 +10,7 @@ import type { ComposeOption } from 'echarts/core'
 import type { LineSeriesOption } from 'echarts/charts'
 import type { GridComponentOption, LegendComponentOption, TooltipComponentOption } from 'echarts/components'
 import { fetchDashboard, type BlockedEvent, type DashboardData, type EventType } from '../api'
+import { isDark } from '../theme'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
@@ -78,7 +79,13 @@ const chartOption = computed<
   ComposeOption<LineSeriesOption | GridComponentOption | LegendComponentOption | TooltipComponentOption>
 >(() => {
   const t = data.value?.traffic ?? []
+  // the theme's colors (theme.css), read again when the theme changes
+  void isDark.value
+  const css = getComputedStyle(document.documentElement)
+  const color = (name: string) => css.getPropertyValue(name).trim()
   return {
+    backgroundColor: 'transparent',
+    color: [color('--c-info'), color('--c-error')],
     tooltip: { trigger: 'axis' },
     legend: { data: ['Inbound', 'Dropped'], top: 0 },
     grid: { left: 60, right: 20, top: 36, bottom: 30 },
@@ -86,9 +93,16 @@ const chartOption = computed<
     yAxis: { type: 'value', name: 'pps' },
     series: [
       { name: 'Inbound', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, data: t.map((p) => p.inbound_pps) },
-      { name: 'Dropped', type: 'line', smooth: true, showSymbol: false, color: '#d03050', data: t.map((p) => p.dropped_pps) },
+      { name: 'Dropped', type: 'line', smooth: true, showSymbol: false, data: t.map((p) => p.dropped_pps) },
     ],
   }
+})
+
+/** The chart's "loading" overlay, in the theme's colors. */
+const loadingOptions = computed(() => {
+  void isDark.value
+  const css = getComputedStyle(document.documentElement)
+  return { maskColor: 'transparent', textColor: css.getPropertyValue('--c-muted').trim(), color: css.getPropertyValue('--c-info').trim() }
 })
 
 const eventColumns: DataTableColumns<BlockedEvent> = [
@@ -131,7 +145,14 @@ const eventColumns: DataTableColumns<BlockedEvent> = [
 
     <NGi span="4">
       <NCard title="Traffic">
-        <VChart :option="chartOption" :loading="loading" autoresize style="height: 320px" />
+        <VChart
+          :option="chartOption"
+          :theme="isDark ? 'dark' : undefined"
+          :loading="loading"
+          :loading-options="loadingOptions"
+          autoresize
+          style="height: 320px"
+        />
       </NCard>
     </NGi>
 

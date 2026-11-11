@@ -265,4 +265,7 @@ const ipText = (n: Net) => intToIp(n.net)
   margin: 0 0 12px;
   font-size: 13px;
 }
+.intro a {
+  color: var(--c-info-text);
+}
 </style>

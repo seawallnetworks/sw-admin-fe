@@ -210,7 +210,7 @@ h4 {
   margin: 0 0 6px;
 }
 .list {
-  border: 1px solid rgba(128, 128, 128, 0.25);
+  border: 1px solid var(--c-border);
   border-radius: 4px;
   margin-bottom: 8px;
 }
@@ -233,10 +233,10 @@ h4 {
   cursor: pointer;
 }
 .toggle:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: var(--c-subtle-bg);
 }
 .toggle:focus-visible {
-  outline: 2px solid #18a058;
+  outline: 2px solid var(--c-success);
   outline-offset: -2px;
 }
 .caret {
@@ -259,35 +259,35 @@ th,
 td {
   text-align: left;
   padding: 4px 8px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  border-bottom: 1px solid var(--c-border);
 }
 th {
   font-weight: 600;
-  color: #888;
+  color: var(--c-muted);
 }
 .right {
   text-align: right;
 }
 .explain {
   padding: 6px 12px;
-  background: rgba(208, 48, 80, 0.06);
-  color: #d03050;
+  background: var(--c-error-tint-weak);
+  color: var(--c-error-text);
   font-size: 13px;
 }
 .cancel {
   margin-left: 8px;
 }
 .muted {
-  color: #888;
+  color: var(--c-muted);
 }
 .small {
   font-size: 12px;
 }
 .warn {
-  color: #f0a020;
+  color: var(--c-warning-text);
 }
 .near {
-  color: #f0a020;
+  color: var(--c-warning-text);
   font-weight: 600;
 }
 code {

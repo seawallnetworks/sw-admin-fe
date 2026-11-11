@@ -128,7 +128,7 @@ function setMockState(s: string) {
   align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  border-bottom: 1px solid var(--c-border);
   margin-bottom: 16px;
 }
 .tabs {
@@ -150,27 +150,27 @@ function setMockState(s: string) {
   cursor: pointer;
 }
 .tab:hover {
-  color: #18a058;
+  color: var(--c-success-text);
 }
 .tab[aria-selected='true'] {
-  border-bottom-color: #18a058;
-  color: #18a058;
+  border-bottom-color: var(--c-success);
+  color: var(--c-success-text);
   font-weight: 600;
 }
 .tab:focus-visible {
-  outline: 2px solid #18a058;
+  outline: 2px solid var(--c-success);
   outline-offset: -2px;
 }
 .divider {
   width: 1px;
   margin: 8px 6px;
-  background: rgba(128, 128, 128, 0.35);
+  background: var(--c-border-strong);
 }
 .badge {
   min-width: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: rgba(128, 128, 128, 0.18);
+  background: var(--c-subtle-bg-2);
   font-size: 12px;
   line-height: 18px;
   text-align: center;
@@ -183,6 +183,6 @@ function setMockState(s: string) {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 </style>

@@ -1,0 +1,72 @@
+/*
+ * The console's colors, for the light and the dark theme. src/theme.ts sets data-theme on <html>
+ * (index.html does it first, before the app loads, so a dark page never flashes white).
+ *
+ * Accent colors are for bars, borders and fills; text colors are for words, and meet 4.5:1
+ * contrast on the page and card backgrounds of their theme. The dark values are Naive UI's dark
+ * palette, so our colors match its components.
+ */
+:root {
+  color-scheme: light;
+
+  --c-page-bg: #f5f7fa;
+  --c-code-bg: #f2f3f5;
+  --c-border: rgba(128, 128, 128, 0.25);
+  --c-border-strong: rgba(128, 128, 128, 0.35);
+  --c-subtle-bg: rgba(128, 128, 128, 0.08);
+  --c-subtle-bg-2: rgba(128, 128, 128, 0.14);
+
+  --c-muted: #666;
+
+  --c-success: #18a058;
+  --c-error: #d03050;
+  --c-warning: #f0a020;
+  --c-info: #2080f0;
+
+  --c-success-text: #0b6e3c;
+  --c-error-text: #c02848;
+  --c-warning-text: #8a5100;
+  --c-info-text: #1060c9;
+
+  --c-success-tint: rgba(24, 160, 88, 0.1);
+  --c-error-tint: rgba(208, 48, 80, 0.1);
+  --c-error-tint-weak: rgba(208, 48, 80, 0.06);
+  --c-warning-tint: rgba(240, 160, 32, 0.1);
+  --c-info-tint: rgba(32, 128, 240, 0.1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-page-bg: #101014;
+  --c-code-bg: rgba(255, 255, 255, 0.08);
+  --c-border: rgba(255, 255, 255, 0.14);
+  --c-border-strong: rgba(255, 255, 255, 0.24);
+  --c-subtle-bg: rgba(255, 255, 255, 0.05);
+  --c-subtle-bg-2: rgba(255, 255, 255, 0.1);
+
+  --c-muted: #9a9aa0;
+
+  --c-success: #63e2b7;
+  --c-error: #e88080;
+  --c-warning: #f2c97d;
+  --c-info: #70c0e8;
+
+  --c-success-text: #63e2b7;
+  --c-error-text: #e88080;
+  --c-warning-text: #f2c97d;
+  --c-info-text: #70c0e8;
+
+  --c-success-tint: rgba(99, 226, 183, 0.12);
+  --c-error-tint: rgba(232, 128, 128, 0.14);
+  --c-error-tint-weak: rgba(232, 128, 128, 0.08);
+  --c-warning-tint: rgba(242, 201, 125, 0.1);
+  --c-info-tint: rgba(112, 192, 232, 0.12);
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}

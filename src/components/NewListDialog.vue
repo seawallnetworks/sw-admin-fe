@@ -256,7 +256,7 @@ async function onCreate() {
   flex-direction: column;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid rgba(128, 128, 128, 0.35);
+  border: 1px solid var(--c-border-strong);
   border-radius: 6px;
   background: none;
   color: inherit;
@@ -266,15 +266,15 @@ async function onCreate() {
 }
 .card span {
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .card.on {
-  border-color: #18a058;
-  box-shadow: inset 0 0 0 1px #18a058;
-  background: rgba(24, 160, 88, 0.06);
+  border-color: var(--c-success);
+  box-shadow: inset 0 0 0 1px var(--c-success);
+  background: var(--c-success-tint);
 }
 .card:focus-visible {
-  outline: 2px solid #18a058;
+  outline: 2px solid var(--c-success);
   outline-offset: 2px;
 }
 .label {

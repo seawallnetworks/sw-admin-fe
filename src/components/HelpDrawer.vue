@@ -109,12 +109,12 @@ p {
 .marker {
   flex: none;
   min-width: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 code {
   padding: 0 4px;
   border-radius: 3px;
-  background: #f2f3f5;
+  background: var(--c-code-bg);
   font-size: 0.92em;
 }
 .footer {
@@ -124,7 +124,7 @@ code {
   justify-content: space-between;
   width: 100%;
   font-size: 12px;
-  color: #888;
+  color: var(--c-muted);
 }
 .footer .n-button {
   flex: none;

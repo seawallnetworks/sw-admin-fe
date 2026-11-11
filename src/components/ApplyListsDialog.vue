@@ -309,7 +309,7 @@ fieldset {
   min-width: 0;
   margin: 0;
   padding: 8px 12px 12px;
-  border: 1px solid rgba(128, 128, 128, 0.3);
+  border: 1px solid var(--c-border);
   border-radius: 4px;
 }
 legend {
@@ -329,10 +329,10 @@ legend {
   margin-top: 8px;
 }
 .muted {
-  color: #888;
+  color: var(--c-muted);
 }
 .also {
-  color: #2080f0;
+  color: var(--c-info-text);
 }
 .small {
   font-size: 12px;
@@ -340,11 +340,11 @@ legend {
 .error {
   margin-top: 4px;
   font-size: 12px;
-  color: #d03050;
+  color: var(--c-error-text);
 }
 .warn-text {
   margin-top: 4px;
   font-size: 12px;
-  color: #f0a020;
+  color: var(--c-warning-text);
 }
 </style>
