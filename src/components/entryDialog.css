@@ -71,8 +71,7 @@
 .muted {
   color: var(--c-muted);
 }
-.ace,
-.ace-input :deep(input) {
+.ace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .preview {

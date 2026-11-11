@@ -1,9 +1,8 @@
 <script setup lang="ts">
-// Add Entry for an extended list (stage 2): the form builds the entry (src/ace.ts), or it is typed.
+// Add Entry for an extended list (stage 2): the form builds the entry (src/ace.ts).
 import { computed, ref } from 'vue'
 import {
-  NAlert, NButton, NForm, NFormItem, NInput, NInputNumber, NModal, NRadio, NRadioGroup, NRadioButton, NSelect,
-  NSpace, NSwitch, NTag,
+  NAlert, NButton, NForm, NFormItem, NInputNumber, NModal, NRadio, NRadioGroup, NRadioButton, NSelect, NSpace, NTag,
 } from 'naive-ui'
 import AceAddrInput from './AceAddrInput.vue'
 import AcePortInput from './AcePortInput.vue'
@@ -26,14 +25,11 @@ const title = props.req.iface
   : `Add to List ${acl} (extended)`
 
 const form = ref<AceForm>(emptyAceForm(false))
-const typeEntry = ref(false)
-const typed = ref('')
 const pos = ref(props.req.pos ?? 'end')
 
 const ports = computed(() => hasPorts(form.value.protocol))
-const built = computed(() => buildAce(form.value, false))
-/** The entry as it would be sent: typed, or built by the form. */
-const ace = computed(() => (typeEntry.value ? typed.value.trim() : built.value))
+/** The entry the form builds, in the device's syntax: what is sent, and the preview. */
+const ace = computed(() => buildAce(form.value, false))
 
 // ---------- position ----------
 
@@ -105,33 +101,20 @@ function onProtoNumber(n: number | null) {
   form.value.protoNumber = n
 }
 
-/** Switching to typing starts from what the form has built so far. */
-function onTypeEntry(on: boolean) {
-  typeEntry.value = on
-  if (on && !typed.value.trim()) typed.value = built.value
-}
-
 // ---------- adding ----------
 
 const submitting = ref(false)
 
 async function onAdd() {
-  if (typeEntry.value) {
-    if (!typed.value.trim()) {
-      page.message.warning('Enter the entry, for example "permit tcp any any eq 22"')
-      return
-    }
-  } else {
-    const f = form.value
-    if (ports.value && f.dstPort.op === 'eq' && f.dstPort.port === null) {
-      page.message.warning('Choose a destination port: one of the buttons, Any port, or a number')
-      return
-    }
-    const errors = aceFormErrors(f, false)
-    if (errors.length) {
-      page.message.warning(errors[0])
-      return
-    }
+  const f = form.value
+  if (ports.value && f.dstPort.op === 'eq' && f.dstPort.port === null) {
+    page.message.warning('Choose a destination port: one of the buttons, Any port, or a port number')
+    return
+  }
+  const errors = aceFormErrors(f, false)
+  if (errors.length) {
+    page.message.warning(errors[0])
+    return
   }
   if (limitErr.value) {
     page.message.warning(limitErr.value)
@@ -158,39 +141,39 @@ async function onAdd() {
     <NAlert v-if="also.length" type="info" :bordered="false" class="shared">{{ sharedNote(also) }}</NAlert>
     <div class="layout">
       <NForm label-placement="left" label-width="110" class="form">
-        <template v-if="!typeEntry">
-          <NFormItem label="Action">
-            <NRadioGroup v-model:value="form.action">
-              <NRadioButton value="permit">Permit</NRadioButton>
-              <NRadioButton value="deny">Deny</NRadioButton>
-            </NRadioGroup>
-          </NFormItem>
-          <NFormItem label="Protocol">
-            <NSpace :size="8" :wrap="false">
-              <NSelect :value="form.protocol" :options="protocolOptions" style="width: 200px" @update:value="onProtocol" />
-              <NInputNumber
-                v-if="form.protocol === 'other'"
-                :value="form.protoNumber"
-                :min="0" :max="255"
-                :show-button="false"
-                :update-value-on-input="false"
-                placeholder="0 to 255"
-                style="width: 110px"
-                @update:value="onProtoNumber"
-              />
-            </NSpace>
-          </NFormItem>
-          <NFormItem label="Source">
-            <AceAddrInput v-model="form.src" />
-          </NFormItem>
-          <NFormItem v-if="ports" label="Source port">
-            <AcePortInput v-model="form.srcPort" />
-          </NFormItem>
-          <NFormItem label="Destination">
-            <AceAddrInput v-model="form.dst" />
-          </NFormItem>
-          <NFormItem v-if="ports" label="Destination port">
-            <NSpace :size="6" align="center">
+        <NFormItem label="Action">
+          <NRadioGroup v-model:value="form.action">
+            <NRadioButton value="permit">Permit</NRadioButton>
+            <NRadioButton value="deny">Deny</NRadioButton>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem label="Protocol">
+          <NSpace :size="8" :wrap="false">
+            <NSelect :value="form.protocol" :options="protocolOptions" style="width: 200px" @update:value="onProtocol" />
+            <NInputNumber
+              v-if="form.protocol === 'other'"
+              :value="form.protoNumber"
+              :min="0" :max="255"
+              :show-button="false"
+              :update-value-on-input="false"
+              placeholder="0 to 255"
+              style="width: 110px"
+              @update:value="onProtoNumber"
+            />
+          </NSpace>
+        </NFormItem>
+        <NFormItem label="Source">
+          <AceAddrInput v-model="form.src" />
+        </NFormItem>
+        <NFormItem v-if="ports" label="Source port">
+          <AcePortInput v-model="form.srcPort" />
+        </NFormItem>
+        <NFormItem label="Destination">
+          <AceAddrInput v-model="form.dst" />
+        </NFormItem>
+        <NFormItem v-if="ports" label="Destination port">
+          <div class="field">
+            <NSpace :size="6" align="center" class="chips">
               <NButton
                 v-for="[label, port] in portChips"
                 :key="label"
@@ -201,37 +184,21 @@ async function onAdd() {
               >
                 {{ label }}
               </NButton>
-              <NInputNumber
-                :value="form.dstPort.op === 'eq' ? form.dstPort.port : null"
-                :min="1" :max="65535"
-                :show-button="false"
-                size="small"
-                placeholder="Other port"
-                style="width: 110px"
-                @update:value="(p: number | null) => (form.dstPort = { op: 'eq', port: p, to: null })"
-              />
             </NSpace>
-          </NFormItem>
-          <NFormItem v-if="ports" label="Match">
-            <NRadioGroup v-model:value="form.match">
-              <NSpace vertical :size="4">
-                <NRadio value="all">All packets</NRadio>
-                <NRadio v-if="form.protocol === 'tcp'" value="established">
-                  Established connections only (packets with ACK or RST)
-                </NRadio>
-                <NRadio value="reply">Replies to connections this device opened</NRadio>
-              </NSpace>
-            </NRadioGroup>
-          </NFormItem>
-        </template>
-        <NFormItem v-else label="Entry">
-          <div class="field">
-            <NInput v-model:value="typed" placeholder="permit tcp any any eq 22" class="ace-input" />
-            <div class="hint">
-              permit or deny, a protocol, a source and a destination, for example
-              <code>permit tcp 192.168.1.0/24 any eq 22</code> or <code>deny ip host 203.0.113.66 any</code>.
-            </div>
+            <!-- any other port, a range, or above or below a port: the same control as Source port -->
+            <AcePortInput v-model="form.dstPort" />
           </div>
+        </NFormItem>
+        <NFormItem v-if="ports" label="Match">
+          <NRadioGroup v-model:value="form.match">
+            <NSpace vertical :size="4">
+              <NRadio value="all">All packets</NRadio>
+              <NRadio v-if="form.protocol === 'tcp'" value="established">
+                Established connections only (packets with ACK or RST)
+              </NRadio>
+              <NRadio value="reply">Replies to connections this device opened</NRadio>
+            </NSpace>
+          </NRadioGroup>
         </NFormItem>
         <NFormItem label="Position">
           <div class="field">
@@ -240,8 +207,8 @@ async function onAdd() {
             <div v-else class="hint">Entries are checked from the top; the first that matches decides.</div>
           </div>
         </NFormItem>
-        <NFormItem v-if="!typeEntry" label="Entry">
-          <code class="ace preview">{{ built }}</code>
+        <NFormItem label="Entry">
+          <code class="ace preview">{{ ace }}</code>
         </NFormItem>
       </NForm>
 
@@ -273,18 +240,17 @@ async function onAdd() {
       </div>
     </div>
     <template #footer>
-      <NSpace justify="space-between" align="center">
-        <NSpace :size="8" align="center">
-          <NSwitch :value="typeEntry" size="small" @update:value="onTypeEntry" />
-          <span class="muted">Type the entry</span>
-        </NSpace>
-        <NSpace>
-          <NButton @click="emit('close')">Cancel</NButton>
-          <NButton type="primary" :loading="submitting" :disabled="!!limitErr" @click="onAdd">Add Entry</NButton>
-        </NSpace>
+      <NSpace justify="end">
+        <NButton @click="emit('close')">Cancel</NButton>
+        <NButton type="primary" :loading="submitting" :disabled="!!limitErr" @click="onAdd">Add Entry</NButton>
       </NSpace>
     </template>
   </NModal>
 </template>
 
 <style scoped src="./entryDialog.css"></style>
+<style scoped>
+.chips {
+  margin-bottom: 6px;
+}
+</style>

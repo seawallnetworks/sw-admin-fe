@@ -112,17 +112,16 @@ The title says where the entry goes, for example "Add to Stage 1 · List 10 (sta
 
 ### Add Entry: stage 2 (an extended list)
 
-A form; the line it builds is shown at the bottom as "Entry".
+A form; the line it builds is shown at the bottom as "Entry", in the device's syntax. Entries are added with the form only; the console has no field for typing the syntax.
 
 - Action: Permit (the default) or Deny.
 - Protocol: IP (any protocol), TCP (the default), UDP, ICMP, or Other by number. Other refuses 0 (choose "IP (any protocol)"), and 1, 6 and 17 switch to ICMP, TCP and UDP so the port fields show.
 - Source and Destination: Any, Host, or Network (`192.168.1.0/24`).
-- Destination port (TCP and UDP): Any port, SSH 22, DNS 53, HTTP 80, HTTPS 443, Console (this console's port), or another port in the number field. Add Entry asks for one until you choose. Source port: usually Any port; also Equal to, Range, Greater than, Less than.
+- Destination port (TCP and UDP): the buttons Any port, SSH 22, DNS 53, HTTP 80, HTTPS 443 and Console (this console's port); or, below them, Equal to another port, a Range (for example 8000 to 8080), Greater than or Less than a port. Add Entry asks for a port until you choose one. Source port: usually Any port; also Equal to, Range, Greater than, Less than, with port numbers 1 to 65535.
 - Match (TCP and UDP): All packets; Established connections only (TCP packets with ACK or RST); or Replies to connections this device opened.
 - Position: as for stage 1; the default is at the end.
 - A list already at 128 entries can't take another: "List N can hold at most 128 entries; it has 128. Remove some first."
 - On the right, the list with the new entry in place, ending with the implicit deny. Warnings: "Never matches" (an earlier entry with the same or any protocol, addresses and ports that include the new one's, and no extra condition), "Very broad" (permit any source to any destination on every port: nothing after it is reached), and "The console" (the list doesn't permit this console's TCP port; see below).
-- "Type the entry" at the bottom left takes the entry in Cisco syntax instead: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`. Use it for a destination port range.
 - There is no Edit: to change an entry, add the new one and delete the old one.
 
 ### Apply lists to an interface
