@@ -38,7 +38,7 @@ const mock = {
     ],
     // applied only on eth9, which isn't on the device
     '110': [{ seq: 10, ace: 'deny ip 192.0.2.0 0.0.0.255 any' }],
-    // empty: applying it shows the "Everything will be dropped" warning
+    // empty: the Apply dialog refuses it until it has entries
     '120': [],
   } as Record<string, AclEntry[]>,
   interfaces: {

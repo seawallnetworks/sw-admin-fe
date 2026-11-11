@@ -247,7 +247,27 @@ function createAclPage() {
     return false
   }
 
+  /**
+   * Why an entry can't be deleted, or null. The last entry of an extended list that an interface
+   * applies can't be: the empty list would drop everything on that interface, this console included.
+   */
+  function deleteBlocked(acl: number, seq: number): string | null {
+    if (isStandard(acl)) return null
+    const on = appliedOn(acl)
+    const es = entriesOf(acl)
+    if (!on.length || es.length !== 1 || es[0].seq !== seq) return null
+    return (
+      `Entry ${seq} is the last in list ${acl}, which ${on.join(', ')} ${on.length === 1 ? 'applies' : 'apply'}: an empty ` +
+      `extended list drops all traffic. Add another entry first, or remove the list from ${on.join(', ')}.`
+    )
+  }
+
   async function deleteEntry(acl: number, seq: number) {
+    const blocked = deleteBlocked(acl, seq)
+    if (blocked) {
+      message.error(blocked, { duration: 8000 })
+      return
+    }
     if (!(await stillCurrent())) return
     await mutate(() => deleteAclEntry(acl, seq), `Entry ${seq} deleted from list ${acl}`).catch(() => {})
   }
@@ -387,7 +407,7 @@ function createAclPage() {
   return {
     config, generation, loading, engine, engineError, start, loadConfig, pollEngine,
     ifaceNames, aclNumbers, entriesOf, appliedOn, alsoOn, ifaceStatus, ifaceTag, unused,
-    mutate, refreshAfterChanges, stillCurrent, deleteEntry, deleteExplanation, deleteList, removeFromIface, setLists,
+    mutate, refreshAfterChanges, stillCurrent, deleteBlocked, deleteEntry, deleteExplanation, deleteList, removeFromIface, setLists,
     UNUSED_TAB, tab, goTo,
     dialogs, openAddEntry, openApply, openNewList,
     message, dialog,

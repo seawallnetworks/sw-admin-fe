@@ -45,6 +45,11 @@ const busy = ref(false)
 watch(() => page.config.value, () => (armed.value = null))
 
 async function onDeleteEntry(acl: number, seq: number) {
+  const blocked = page.deleteBlocked(acl, seq)
+  if (blocked) {
+    page.message.error(blocked, { duration: 8000 })
+    return
+  }
   const key = `${acl}:${seq}`
   if (armed.value !== key) {
     armed.value = key
@@ -99,7 +104,10 @@ function apply(acl: number) {
           · <span class="muted">{{ why(acl, g.key) }}</span>
         </button>
         <NSpace :size="[12, 4]" align="center" class="actions">
-          <NButton text type="primary" size="small" @click="apply(acl)">Apply to an interface</NButton>
+          <NButton v-if="isStandard(acl) || count(acl)" text type="primary" size="small" @click="apply(acl)">
+            Apply to an interface
+          </NButton>
+          <span v-else class="muted small">Add entries before applying it</span>
           <NButton text size="small" @click="page.openAddEntry({ acl, iface: null })">Add Entry</NButton>
           <template v-if="g.key === 'missing'">
             <NButton

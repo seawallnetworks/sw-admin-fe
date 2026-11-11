@@ -100,7 +100,6 @@ const shadowed = computed(() =>
 const noEffect = computed(
   () => action.value === 'permit' && newEntries.value.some((e) => !stdPermitHasEffect(entries.value, e.seq, e.net)),
 )
-const denyAny = computed(() => action.value === 'deny' && newEntries.value.some((e) => e.net.prefix === 0))
 const wide = computed(() => newEntries.value.filter((e) => e.net.prefix > 0 && e.net.prefix < 16))
 // TODO(backend): with the console's client address in the API, warn (red, "Add anyway") when a deny
 // covers it: this would block the browser using the console.
@@ -231,9 +230,6 @@ const ipText = (n: Net) => intToIp(n.net)
           </li>
         </ol>
         <NAlert v-if="limitErr" type="error" :bordered="false" title="List full" class="warn">{{ limitErr }}</NAlert>
-        <NAlert v-if="denyAny" type="error" :bordered="false" title="Drops everything" class="warn">
-          A deny for any source drops all incoming traffic in stage 1, this console's connection included.
-        </NAlert>
         <NAlert v-for="s in shadowed" :key="s.e.seq" type="warning" :bordered="false" title="Never matches" class="warn">
           Entry {{ s.by.seq }} (<code>{{ s.by.ace }}</code>) comes first and already matches
           {{ s.e.net.prefix === 0 ? 'every source' : netText(s.e.net) }}. Choose a position above it.

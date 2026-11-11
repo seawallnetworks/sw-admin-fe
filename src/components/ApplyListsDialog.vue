@@ -23,9 +23,8 @@ const current = computed(() =>
 
 const initial = boundLists(config.value, props.req.iface ?? '')
 const std = ref<StageChoice>(props.req.std ?? initial.std ?? 'none')
-const ext = ref<StageChoice>(props.req.ext ?? initial.ext ?? 'none')
+const ext = ref<StageChoice>(props.req.ext === 'new' ? 'none' : (props.req.ext ?? initial.ext ?? 'none'))
 const newStd = ref<number | null>(nextFreeList(config.value, true))
-const newExt = ref<number | null>(nextFreeList(config.value, false))
 
 // ---------- the interface ----------
 
@@ -80,12 +79,14 @@ function newNumberError(n: number | null, standard: boolean): string | null {
   return null
 }
 const newStdError = computed(() => (std.value === 'new' ? newNumberError(newStd.value, true) : null))
-const newExtError = computed(() => (ext.value === 'new' ? newNumberError(newExt.value, false) : null))
 
-/** The list each stage ends up with (a new list by its number), or null. */
+/**
+ * The list each stage ends up with (a new list by its number), or null. Stage 2 has no "New list":
+ * a new extended list is empty, and an empty one drops everything, so it can't be applied.
+ */
 const chosenStd = computed(() => (std.value === 'none' ? null : std.value === 'new' ? newStd.value : std.value))
-const chosenExt = computed(() => (ext.value === 'none' ? null : ext.value === 'new' ? newExt.value : ext.value))
-const extEntries = computed(() => (ext.value === 'new' || chosenExt.value === null ? [] : page.entriesOf(chosenExt.value)))
+const chosenExt = computed(() => (typeof ext.value === 'number' ? ext.value : null))
+const extEntries = computed(() => (chosenExt.value === null ? [] : page.entriesOf(chosenExt.value)))
 
 /**
  * Chosen lists over mini-fw's limit (64 standard, 128 extended entries): applied, mfwd would refuse
@@ -118,13 +119,13 @@ const noConsole = computed(() => chosenExt.value !== null && extEntries.value.le
 const failOpen = computed(() => chosenExt.value === null && chosenStd.value !== null)
 const shared = computed(() =>
   [chosenStd.value, chosenExt.value]
-    .filter((a): a is number => a !== null && (std.value !== 'new' || a !== newStd.value) && (ext.value !== 'new' || a !== newExt.value))
+    .filter((a): a is number => a !== null && (std.value !== 'new' || a !== newStd.value))
     .map((a) => ({ acl: a, on: page.alsoOn(a, name.value) }))
     .filter((x) => x.on.length),
 )
 const nothing = computed(() => chosenStd.value === null && chosenExt.value === null && current.value.std === null && current.value.ext === null)
 const unchanged = computed(
-  () => std.value !== 'new' && ext.value !== 'new' && chosenStd.value === current.value.std && chosenExt.value === current.value.ext,
+  () => std.value !== 'new' && chosenStd.value === current.value.std && chosenExt.value === current.value.ext,
 )
 
 // ---------- applying ----------
@@ -134,11 +135,11 @@ const problem = computed(() => {
   if (!name.value) return 'Enter the interface'
   if (nameError.value) return nameError.value
   if (newStdError.value) return newStdError.value
-  if (newExtError.value) return newExtError.value
   if (overLimit.value.length) {
     const { acl, fill } = overLimit.value[0]
     return `List ${acl} can hold at most ${fill.max} entries; it has ${fill.count}. Remove some first.`
   }
+  if (emptyExt.value) return `List ${chosenExt.value} has no entries and would drop all traffic. Add entries first.`
   if (nothing.value) return 'Choose a list for at least one stage'
   if (unchanged.value) return `${name.value} already applies these lists`
   return null
@@ -153,7 +154,6 @@ async function onApply() {
   submitting.value = true
   try {
     if (std.value === 'new') await createAcl(newStd.value!)
-    if (ext.value === 'new') await createAcl(newExt.value!)
     await page.setLists(i, chosenStd.value, chosenExt.value)
     page.message.success(`${i} applies ${[chosenStd.value, chosenExt.value].filter((a) => a !== null).map((a) => `list ${a}`).join(' and ') || 'no list'}`)
     await page.refreshAfterChanges()
@@ -225,25 +225,15 @@ async function onApply() {
         <NRadioGroup v-model:value="ext">
           <NSpace vertical :size="6">
             <NRadio value="none">None</NRadio>
-            <NRadio v-for="a in extLists" :key="a" :value="a">
+            <NRadio v-for="a in extLists" :key="a" :value="a" :disabled="!page.entriesOf(a).length && a !== current.ext">
               List {{ a }} <span class="muted">· {{ summary(a) }}</span>
+              <span v-if="!page.entriesOf(a).length" class="muted"> · add entries before applying it</span>
               <span v-if="alsoText(a)" class="also"> · {{ alsoText(a) }}</span>
             </NRadio>
-            <NRadio value="new">
-              New list
-              <NInputNumber
-                v-if="ext === 'new'"
-                v-model:value="newExt"
-                size="tiny"
-                :min="EXT_RANGE[0]" :max="EXT_RANGE[1]"
-                :show-button="false"
-                :status="newExtError ? 'error' : undefined"
-                style="width: 80px; display: inline-flex; margin-left: 6px"
-              />
-              <span class="muted"> {{ EXT_RANGE[0] }}-{{ EXT_RANGE[1] }}</span>
-            </NRadio>
-            <div v-if="newExtError" class="error">{{ newExtError }}</div>
           </NSpace>
+          <div class="muted small new-hint">
+            To use a new extended list, create it with New List, add its entries, then apply it here.
+          </div>
         </NRadioGroup>
       </fieldset>
     </div>
@@ -259,9 +249,9 @@ async function onApply() {
       refuse the whole configuration and keep running the previous one. Remove {{ o.fill.count - o.fill.max }} first.
     </NAlert>
     <NAlert v-if="emptyExt" type="error" :bordered="false" title="Everything will be dropped" class="warn">
-      List {{ chosenExt }} {{ ext === 'new' ? 'will be new and empty' : 'has no entries' }}. An extended list drops what it
-      doesn't permit, so {{ name || 'the interface' }} will drop ALL incoming traffic, this console's connection included
-      if it arrives there. Add entries to the list first, or apply it anyway and add them right after.
+      List {{ chosenExt }} has no entries. An extended list drops what it doesn't permit, so
+      {{ name || 'the interface' }} would drop ALL incoming traffic, this console's connection included if it arrives
+      there. Add entries to the list first, or choose another list.
     </NAlert>
     <NAlert v-else-if="noConsole" type="warning" :bordered="false" title="The console" class="warn">
       {{ consoleWarning(name ? [name] : []) }}
@@ -284,8 +274,8 @@ async function onApply() {
     <template #footer>
       <NSpace justify="end">
         <NButton @click="emit('close')">Cancel</NButton>
-        <NButton :type="emptyExt ? 'error' : 'primary'" :loading="submitting" :disabled="overLimit.length > 0" @click="onApply">
-          {{ emptyExt ? 'Apply anyway' : 'Apply' }}
+        <NButton type="primary" :loading="submitting" :disabled="overLimit.length > 0 || emptyExt" @click="onApply">
+          Apply
         </NButton>
       </NSpace>
     </template>
@@ -333,6 +323,9 @@ legend {
 }
 .also {
   color: var(--c-info-text);
+}
+.new-hint {
+  margin-top: 8px;
 }
 .small {
   font-size: 12px;

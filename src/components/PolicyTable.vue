@@ -3,7 +3,7 @@
 // a packet arriving on it can meet, in the order it meets them, with the actions on each.
 import { computed, ref, watch } from 'vue'
 import { NButton, NSpace, NTable } from 'naive-ui'
-import { listFill, policyRows, positionAfter, type PolicyRow, type Verdict } from '../policy'
+import { isStandard, listFill, policyRows, positionAfter, type PolicyRow, type Verdict } from '../policy'
 import { sharedNote, useAclPage } from '../aclPage'
 
 const props = defineProps<{ iface: string; verdict: Verdict | null }>()
@@ -23,6 +23,11 @@ const deleting = ref(false)
 watch([() => page.config.value, () => props.iface], () => (armed.value = null))
 
 async function onDelete(r: Extract<PolicyRow, { kind: 'entry' }>) {
+  const blocked = page.deleteBlocked(r.acl, r.seq)
+  if (blocked) {
+    page.message.error(blocked, { duration: 8000 })
+    return
+  }
   if (armed.value !== r.key) {
     armed.value = r.key
     return
@@ -43,9 +48,14 @@ function insertBelow(r: Extract<PolicyRow, { kind: 'entry' }>) {
 /** "Add a standard/extended list": preselects a list of that kind no interface uses, else a new one. */
 function addList(stage: 1 | 2) {
   const { notApplied } = page.unused.value
-  const free = notApplied.find((a) => (a < 100) === (stage === 1))
-  const choice = free ?? 'new'
-  page.openApply({ iface: props.iface, fixed: true, ...(stage === 1 ? { std: choice } : { ext: choice }) })
+  if (stage === 1) {
+    const free = notApplied.find(isStandard)
+    page.openApply({ iface: props.iface, fixed: true, std: free ?? 'new' })
+    return
+  }
+  // an empty extended list can't be applied, and a new one is empty
+  const free = notApplied.find((a) => !isStandard(a) && page.entriesOf(a).length > 0)
+  page.openApply({ iface: props.iface, fixed: true, ...(free !== undefined ? { ext: free } : {}) })
 }
 
 function changeList(stage: 1 | 2, acl: number) {
