@@ -80,6 +80,16 @@ function setMockState(s: string) {
             {{ n }}
             <NTag size="tiny" :type="page.ifaceTag(n).type" :bordered="false">{{ page.ifaceTag(n).label }}</NTag>
           </button>
+          <!-- after the interface tabs, as a new-tab "+": it adds one. Arrow keys skip it; Tab reaches it. -->
+          <NButton
+            dashed
+            size="small"
+            class="add-iface"
+            title="Apply lists to another interface"
+            @click="page.openApply({ iface: null, fixed: false })"
+          >
+            + Another interface
+          </NButton>
           <span class="divider" aria-hidden="true"></span>
           <button
             :id="`tab-${page.UNUSED_TAB}`"
@@ -94,9 +104,6 @@ function setMockState(s: string) {
             <span class="badge">{{ unusedCount }}</span>
           </button>
         </div>
-        <NButton dashed size="small" class="add-iface" @click="page.openApply({ iface: null, fixed: false })">
-          + Apply lists to another interface
-        </NButton>
       </div>
 
       <div role="tabpanel" class="panel">
@@ -126,7 +133,6 @@ function setMockState(s: string) {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  justify-content: space-between;
   gap: 8px;
   border-bottom: 1px solid var(--c-border);
   margin-bottom: 16px;
@@ -176,7 +182,8 @@ function setMockState(s: string) {
   text-align: center;
 }
 .add-iface {
-  margin-bottom: 6px;
+  align-self: center;
+  margin: 0 4px 0 8px;
 }
 .mock {
   display: inline-flex;

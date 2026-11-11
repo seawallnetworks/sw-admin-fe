@@ -62,7 +62,7 @@ Access lists (ACLs) allow or block incoming traffic, in the same numbered, Cisco
 
 ### The page
 
-- A row of tabs: one per interface that has lists, each with a tag: "Filtered" (the engine is filtering it), "Not on this device" (the configuration names an interface the device doesn't have), or "Not filtered". After a divider, "Lists not in use", with how many there are. On the right, "+ Apply lists to another interface".
+- A row of tabs: one per interface that has lists, each with a tag: "Filtered" (the engine is filtering it), "Not on this device" (the configuration names an interface the device doesn't have), or "Not filtered". Right after them, "+ Another interface" (it opens Apply lists to an interface). After a divider, "Lists not in use", with how many there are.
 - The selected tab is part of the page's address (for example `/acl?iface=eth0`), so a reload or a shared link opens the same tab.
 
 ### An interface's tab
@@ -126,7 +126,7 @@ A form; the line it builds is shown at the bottom as "Entry", in the device's sy
 
 ### Apply lists to an interface
 
-Opened by "+ Apply lists to another interface", "Change list" or "Add a standard/extended list" on a stage heading (interface fixed), and "Apply to an interface" on a list not in use (that list chosen).
+Opened by "+ Another interface" after the interface tabs, "Change list" or "Add a standard/extended list" on a stage heading (interface fixed), and "Apply to an interface" on a list not in use (that list chosen).
 
 - Interface: type the name, for example `eth0`; the configured interfaces are suggested. The console can't list the device's interfaces yet, so it warns when the engine doesn't know the name ("may not exist on this device"). "Same lists as <interface>" chooses both stages as on that interface.
 - Stage 1 · Standard list (1-99) and Stage 2 · Extended list (100-199): None or one of the existing lists (with its entry count, its first entry, and "also on <interfaces>"). An extended list with no entries can't be chosen ("add entries before applying it"): it would drop everything.
