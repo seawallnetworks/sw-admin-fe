@@ -411,14 +411,20 @@ export interface AddrLines {
   errors: { line: number; text: string; error: string }[]
 }
 
-/** A textarea of sources, one per line; blank lines and lines starting with # are skipped. */
-export function parseAddrLines(text: string): AddrLines {
+export const NO_ANY_ERROR = 'Any source (0.0.0.0/0) is not allowed here'
+
+/**
+ * A textarea of sources, one per line; blank lines and lines starting with # are skipped.
+ * With `noAny`, a line meaning every source (`any`, `0.0.0.0/0`) is an error.
+ */
+export function parseAddrLines(text: string, noAny = false): AddrLines {
   const out: AddrLines = { items: [], errors: [] }
   text.split('\n').forEach((raw, i) => {
     const t = raw.trim()
     if (!t || t.startsWith('#')) return
     const r = parseAddress(t)
-    if (r.net) out.items.push({ line: i + 1, text: t, net: r.net })
+    if (noAny && r.net?.prefix === 0) out.errors.push({ line: i + 1, text: t, error: NO_ANY_ERROR })
+    else if (r.net) out.items.push({ line: i + 1, text: t, net: r.net })
     else out.errors.push({ line: i + 1, text: t, error: r.error })
   })
   return out

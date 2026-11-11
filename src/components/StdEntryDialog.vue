@@ -6,7 +6,7 @@ import {
   NAlert, NButton, NForm, NFormItem, NInput, NModal, NRadioButton, NRadioGroup, NSelect, NSpace, NTag,
 } from 'naive-ui'
 import AddressLines from './AddressLines.vue'
-import { ANY_NET, intToIp, netText, parseAddrLines, parseAddress, sameNet, stdAce, parseAceRule, type Net } from '../ace'
+import { NO_ANY_ERROR, intToIp, netText, parseAddrLines, parseAddress, sameNet, stdAce, parseAceRule, type Net } from '../ace'
 import {
   NO_ROOM, defaultStdPosition, limitError, listFill, placeEntries, positionOptions, shadowingEntry, stdPermitHasEffect,
 } from '../policy'
@@ -26,7 +26,7 @@ const title = props.req.iface
   : `Add to List ${acl} (standard)`
 
 const action = ref<'deny' | 'permit'>('deny')
-type SrcKind = 'host' | 'network' | 'any' | 'several'
+type SrcKind = 'host' | 'network' | 'several'
 const srcKind = ref<SrcKind>('host')
 const srcValue = ref('')
 const lines = ref('')
@@ -37,10 +37,12 @@ const pos = ref(props.req.pos ?? defaultStdPosition(entries.value))
 /** The one source's error, once something is typed. */
 const singleError = computed(() => {
   const v = srcValue.value.trim()
-  if (srcKind.value === 'any' || srcKind.value === 'several' || !v) return null
+  if (srcKind.value === 'several' || !v) return null
   if (srcKind.value === 'host' && v.includes('/')) return 'That is a network: choose Network'
   if (srcKind.value === 'network' && !v.includes('/')) return 'Write the network with its prefix length, for example 198.51.100.0/24'
-  return parseAddress(v).error ?? null
+  const r = parseAddress(v)
+  if (r.net?.prefix === 0) return NO_ANY_ERROR
+  return r.error ?? null
 })
 
 const existingNets = computed(() =>
@@ -49,13 +51,12 @@ const existingNets = computed(() =>
 
 /** The sources to add, duplicates and those already in the list left out; and how many were. */
 const sources = computed<{ nets: { net: Net; text: string }[]; skipped: number; errors: number }>(() => {
-  if (srcKind.value === 'any') return { nets: [{ net: ANY_NET, text: 'any' }], skipped: 0, errors: 0 }
   if (srcKind.value !== 'several') {
     const v = srcValue.value.trim()
     const r = parseAddress(v)
     return { nets: v && !singleError.value && r.net ? [{ net: r.net, text: v }] : [], skipped: 0, errors: 0 }
   }
-  const parsed = parseAddrLines(lines.value)
+  const parsed = parseAddrLines(lines.value, true)
   const nets: { net: Net; text: string }[] = []
   let skipped = 0
   for (const it of parsed.items) {
@@ -181,7 +182,6 @@ const ipText = (n: Net) => intToIp(n.net)
             <NRadioGroup v-model:value="srcKind" size="small">
               <NRadioButton value="host">Host</NRadioButton>
               <NRadioButton value="network">Network</NRadioButton>
-              <NRadioButton value="any">Any</NRadioButton>
               <NRadioButton value="several">Several</NRadioButton>
             </NRadioGroup>
             <div v-if="srcKind === 'host' || srcKind === 'network'" style="margin-top: 6px">
@@ -193,7 +193,7 @@ const ipText = (n: Net) => intToIp(n.net)
               <div v-if="singleError" class="error">{{ singleError }}</div>
             </div>
             <div v-else-if="srcKind === 'several'" style="margin-top: 6px">
-              <AddressLines v-model="lines" />
+              <AddressLines v-model="lines" no-any />
               <div v-if="limitErr && count > 1" class="error">
                 Only {{ room }} of the {{ count }} addresses fit in list {{ acl }}.
               </div>

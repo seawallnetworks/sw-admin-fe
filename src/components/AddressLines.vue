@@ -5,9 +5,9 @@ import { NInput } from 'naive-ui'
 import { parseAddrLines } from '../ace'
 
 const text = defineModel<string>({ required: true })
-defineProps<{ placeholder?: string }>()
+const props = defineProps<{ placeholder?: string; noAny?: boolean }>()
 
-const errors = computed(() => parseAddrLines(text.value).errors)
+const errors = computed(() => parseAddrLines(text.value, props.noAny).errors)
 </script>
 
 <template>
