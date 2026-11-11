@@ -107,6 +107,13 @@ export function portError(p: PortField, what: string): string | null {
   return null
 }
 
+/**
+ * The form's own protocol for a number the device names: it rewrites 1, 6 and 17 as icmp, tcp and udp
+ * (mini-fw's enum mfw_proto), so these are chosen by name, which shows the port fields for TCP and UDP.
+ * 0 is "ip", any protocol, which the form has too; it is refused as a number (aceFormErrors).
+ */
+export const NAMED_PROTOCOLS: Record<number, AceProtocol> = { 1: 'icmp', 6: 'tcp', 17: 'udp' }
+
 /** Every problem with the form, for a standard or an extended list; empty when it can be sent. */
 export function aceFormErrors(f: AceForm, standard: boolean): string[] {
   const errors = [addrError(f.src, 'source')]
@@ -114,6 +121,8 @@ export function aceFormErrors(f: AceForm, standard: boolean): string[] {
     if (f.protocol === 'other') {
       const n = f.protoNumber
       if (n === null || !Number.isInteger(n) || n < 0 || n > 255) errors.push('Enter the protocol number, 0 to 255')
+      else if (n === 0) errors.push('Protocol 0 means any protocol: choose "IP (any protocol)" instead')
+      else if (NAMED_PROTOCOLS[n]) errors.push(`Protocol ${n} is ${NAMED_PROTOCOLS[n].toUpperCase()}: choose it by name`)
     }
     errors.push(addrError(f.dst, 'destination'))
     if (hasPorts(f.protocol)) errors.push(portError(f.srcPort, 'source'), portError(f.dstPort, 'destination'))

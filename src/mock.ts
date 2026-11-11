@@ -32,6 +32,8 @@ const mock = {
       { seq: 60, ace: 'permit icmp any any' },
     ],
     '110': [{ seq: 10, ace: 'deny ip 192.0.2.0 0.0.0.255 any' }],
+    // empty: applying it shows the "drops ALL incoming traffic" warning
+    '120': [],
   } as Record<string, AclEntry[]>,
   interfaces: {
     eth0: { acls_in: [10, 100] },
@@ -61,6 +63,14 @@ function changed(extra: object = {}) {
 }
 
 const unchanged = () => ({ generation: mock.generation })
+
+// Another admin, or the CLI, changing the configuration: run mockCliChange() in the browser console,
+// then delete an entry, to see the page refuse and reload instead of deleting by a stale seq.
+;(globalThis as { mockCliChange?: () => void }).mockCliChange = () => {
+  const list = mock.acls['100']
+  list.unshift({ seq: Math.max(1, (list[0]?.seq ?? 10) - 5), ace: 'deny tcp host 198.51.100.7 any' })
+  changed()
+}
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
   ['POST', /^\/session$/, (_, { body }) => {

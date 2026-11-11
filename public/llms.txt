@@ -6,6 +6,7 @@
 
 - Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
 - Access list changes (adding or deleting an entry or a list, applying a list to an interface or removing it) take effect as soon as the user clicks "OK" or confirms, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
+- Applying an extended list (100 to 199) to an interface drops all incoming traffic the list doesn't permit, even when the list is empty, and that can cut off the user's own connection to the console. Before suggesting it, make sure the list permits what must keep working, such as the console itself (TCP port 8443). If the user is already cut off, restarting the device restores the saved configuration, as long as the change wasn't saved with "Save Config".
 - If you don't know, say so, and suggest the user ask their device administrator.
 
 ## Logging in and out
@@ -89,7 +90,8 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
   - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network such as `198.51.100.0/24` (a wildcard mask, `198.51.100.0 0.0.0.255`, works too).
   - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`.
 - There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, give it a Seq between theirs (for example 15 between 10 and 20).
-- Delete an entry: click "Delete" on its row and confirm.
+- Delete an entry: click "Delete" on its row and confirm. If the list is an extended list in force on an interface, the confirmation warns that removing a permit entry can cut off traffic, including this console.
+- If someone else changed the access lists (another administrator, or the command line) since the page showed them, a delete is not made: the page shows the lists as they are now and says so. Check the entry and delete it again.
 - Delete a list: click "Delete List" on its tab and confirm. A list that an interface applies can't be deleted; remove it from the interface first.
 - If the device refuses a change, its reason is shown as it is, for example "access list 100 already has sequence 10" or "access list 100 is applied to eth0; remove it there first".
 
@@ -97,7 +99,8 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 
 - Columns: Interface, Lists applied (incoming), Actions. Next to the name, "Filtered" means the engine is filtering it now; "Not on this device" means no such interface exists.
 - Apply a list: click "Apply List" (on the interface's row, or at the top right of the card for an interface not listed yet), enter the interface name, for example `eth0`, choose the list, and click "OK". It replaces the list of the same kind (standard or extended) the interface applied.
-- Stop applying a list: click the × on its tag in "Lists applied" and choose "Remove".
+- Applying an extended list asks first, since the interface then drops all incoming traffic the list doesn't permit, including this console's connection if it arrives on that interface. An empty extended list drops ALL incoming traffic on it. Before applying one, make sure it permits what must keep working, for example the console: `permit tcp any any eq 8443`. A standard list needs no such care: it only drops what it denies.
+- Stop applying a list: click the × on its tag in "Lists applied" and choose "Remove". This is the safe direction: the interface stops filtering by that list.
 - Delete: click "Delete" on the row and confirm. The interface stops applying all its lists.
 
 ### Examples
@@ -117,6 +120,7 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 - "Save Config" saves the running configuration, so the device loads it at its next start, and the "Unsaved changes" tag goes away.
 - If you undo a change by hand, the tag goes away too, since the configuration matches the saved one again.
 - Only administrators can save the configuration.
+- If a change cuts off your access to the console (for example an extended list that doesn't permit it), restart the device: it starts with the saved configuration, without the unsaved change. This works only if the change wasn't saved with "Save Config".
 
 ## Common questions
 

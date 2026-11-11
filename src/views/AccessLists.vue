@@ -7,7 +7,9 @@ import {
 } from 'naive-ui'
 import AceAddrInput from '../components/AceAddrInput.vue'
 import AcePortInput from '../components/AcePortInput.vue'
-import { aceFormErrors, buildAce, emptyAceForm, hasPorts, parseAce, type AceForm, type AceProtocol } from '../ace'
+import {
+  NAMED_PROTOCOLS, aceFormErrors, buildAce, emptyAceForm, hasPorts, parseAce, type AceForm, type AceProtocol,
+} from '../ace'
 import {
   addAclEntry, bindAcl, createAcl, deleteAcl, deleteAclEntry, deleteInterface, getAclEngine, getConfig, getRole,
   refreshPendingChanges, unbindAcl, type AclEngine, type AclEngineState, type AclEntry, type DeviceConfig,
@@ -27,6 +29,8 @@ const config = ref<DeviceConfig['config'] | null>(null)
 const loading = ref(false)
 /** The list whose tab is open. */
 const selected = ref<number | null>(null)
+/** The configuration's generation when it was read; it moves with every change, from anyone. */
+const generation = ref<number | null>(null)
 
 /** List numbers, in the order the device gives them. */
 const aclNumbers = computed(() => Object.keys(config.value?.acls ?? {}).map(Number))
@@ -39,7 +43,9 @@ const appliedOn = (acl: number) => interfaces.value.filter((i) => i.acls_in.incl
 async function loadConfig() {
   loading.value = true
   try {
-    config.value = (await getConfig()).config
+    const res = await getConfig()
+    config.value = res.config
+    generation.value = res.generation ?? null
     if (selected.value === null || !aclNumbers.value.includes(selected.value)) {
       selected.value = aclNumbers.value[0] ?? null
     }
@@ -130,8 +136,43 @@ async function onDeleteAcl(acl: number) {
   await mutate(() => deleteAcl(acl), `Access list ${acl} deleted`).catch(() => {})
 }
 
+/**
+ * Whether the configuration is still the one shown. If someone else changed it (another admin, or
+ * the CLI), the page shows the new one and says so, and the caller stops: an entry is deleted by its
+ * seq, which may now be another entry.
+ */
+async function stillCurrent(): Promise<boolean> {
+  const shown = generation.value
+  let res: DeviceConfig
+  try {
+    res = await getConfig()
+  } catch {
+    return false // error already shown by api.ts
+  }
+  // no generation to compare (the running reply always has one): nothing to go by, so go on
+  if (shown === null || res.generation === undefined || res.generation === shown) return true
+  config.value = res.config
+  generation.value = res.generation ?? null
+  message.warning('The access lists were changed elsewhere since you opened them. Check the list, then try again.', {
+    duration: 8000,
+  })
+  return false
+}
+
 async function onDeleteEntry(acl: number, e: AclEntry) {
+  if (!(await stillCurrent())) return
   await mutate(() => deleteAclEntry(acl, e.seq), `Entry ${e.seq} deleted`).catch(() => {})
+}
+
+/** The delete confirmation: an extended list in force can cut off traffic when a permit goes. */
+function deleteEntryText(acl: number, e: EntryRow) {
+  const ask = `Delete entry ${e.seq} "${e.ace}"?`
+  const on = appliedOn(acl)
+  if (isStandard(acl) || !on.length || e.view?.action === 'deny') return ask
+  return (
+    `${ask} List ${acl} is in force on ${on.join(', ')}. Removing a permit entry can cut off the traffic it ` +
+    `let in, including this web console's connection.`
+  )
 }
 
 /** Each entry with its columns; `view` is null for a form the page can't read, shown as its text. */
@@ -176,7 +217,7 @@ function entryColumns(acl: number): DataTableColumns<EntryRow> {
         { onPositiveClick: () => onDeleteEntry(acl, e) },
         {
           trigger: () => h(NButton, { size: 'small', text: true, type: 'error' }, () => 'Delete'),
-          default: () => `Delete entry ${e.seq} "${e.ace}"?`,
+          default: () => h('div', { class: 'confirm' }, deleteEntryText(acl, e)),
         },
       ),
   })
@@ -249,6 +290,20 @@ function onTypeEntry(on: boolean) {
   if (on && !entryAce.value.trim()) entryAce.value = builtAce.value
 }
 
+/** A protocol number the device names is chosen by its name instead; 0 is refused on OK. */
+function onProtoNumber(n: number | null) {
+  // the input also reports its value as it goes away, after a switch
+  if (entryForm.value.protocol !== 'other') return
+  const named = n === null ? undefined : NAMED_PROTOCOLS[n]
+  if (named) {
+    onProtocol(named)
+    entryForm.value.protoNumber = null
+    message.info(`Protocol ${n} is ${named.toUpperCase()}; switched to ${named.toUpperCase()}`)
+    return
+  }
+  entryForm.value.protoNumber = n
+}
+
 function onProtocol(p: AceProtocol) {
   const f = entryForm.value
   f.protocol = p
@@ -288,10 +343,12 @@ async function onAddEntry() {
 
 type IfaceRow = { name: string; acls_in: number[] }
 
+// Removing a list stops filtering, the safe direction: a plain confirm. Applying one is where the
+// warnings are (onApply).
 function onUnbind(iface: string, acl: number) {
-  dialog.warning({
+  dialog.info({
     title: 'Remove list',
-    content: `Stop applying access list ${acl} on ${iface}?`,
+    content: `Stop applying access list ${acl} on ${iface}? ${iface} stops filtering by it.`,
     positiveText: 'Remove',
     negativeText: 'Cancel',
     onPositiveClick: () => mutate(() => unbindAcl(iface, acl), `${iface} no longer applies list ${acl}`).catch(() => {}),
@@ -366,6 +423,39 @@ async function onApply() {
     message.warning('Enter an interface and choose a list')
     return
   }
+  if (isStandard(acl)) {
+    await bind(iface, acl)
+    return
+  }
+  // A bound extended list drops all incoming traffic it doesn't permit, even when it is empty
+  // (mini-fw), and that includes the browser's own connection to this console.
+  const entries = config.value?.acls[acl]?.length ?? 0
+  const port = location.port || '443'
+  dialog.warning({
+    title: entries ? 'Apply an extended list' : 'Apply an empty list',
+    content: () =>
+      h('div', { class: 'confirm' }, [
+        h(
+          'p',
+          entries
+            ? `${iface} will drop all incoming traffic that list ${acl} doesn't permit. That includes this web ` +
+                `console's connection (TCP port ${port}) if it arrives on ${iface} and the list doesn't permit it.`
+            : `List ${acl} has no entries. Applying it drops ALL incoming traffic on ${iface}, including this web ` +
+                `console's connection if it arrives on ${iface}.`,
+        ),
+        h(
+          'p',
+          'The change is in effect at once but not saved: if it cuts off your access, restarting the device ' +
+            'restores the saved configuration.',
+        ),
+      ]),
+    positiveText: entries ? 'Apply' : 'Apply anyway',
+    negativeText: 'Cancel',
+    onPositiveClick: () => bind(iface, acl),
+  })
+}
+
+async function bind(iface: string, acl: number) {
   submitting.value = true
   try {
     await mutate(() => bindAcl(iface, acl), `${iface} applies list ${acl}`)
@@ -425,8 +515,8 @@ async function onApply() {
         Within a list, entries are checked in sequence order, lowest first; the first match decides. Lists 1 to 99 are
         standard: they match the source address, and only drop what they deny. Lists 100 to 199 are extended
         (protocol, addresses, ports), checked after the standard list, and drop what matches no entry. A list does
-        nothing until an interface applies it. Changes take effect at once; click Save Config to keep them after a
-        restart.
+        nothing until an interface applies it. Changes take effect at once but are not saved until you click Save
+        Config: if a change cuts off your access, restarting the device restores the saved configuration.
       </NAlert>
       <NEmpty v-if="!loading && config && !aclNumbers.length" description="No access lists yet" />
       <NTabs v-else :value="selected ?? undefined" type="line" animated @update:value="(v: number) => (selected = v)">
@@ -515,9 +605,11 @@ async function onApply() {
             />
             <NInputNumber
               v-if="entryForm.protocol === 'other'"
-              v-model:value="entryForm.protoNumber"
+              :value="entryForm.protoNumber"
               :min="0" :max="255"
               :show-button="false"
+              :update-value-on-input="false"
+              @update:value="onProtoNumber"
               placeholder="0 to 255"
               style="width: 110px"
             />
@@ -631,6 +723,12 @@ async function onApply() {
   margin-top: 4px;
   font-size: 12px;
   color: #888;
+}
+.confirm p {
+  margin: 0 0 8px;
+}
+.confirm {
+  max-width: 360px;
 }
 .preview {
   padding: 4px 8px;
