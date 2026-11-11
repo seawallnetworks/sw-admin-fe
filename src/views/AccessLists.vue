@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import {
-  NAlert, NButton, NCard, NDataTable, NEmpty, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NResult,
-  NSelect, NSpace, NStatistic, NTabPane, NTabs, NTag, useDialog, useMessage, type DataTableColumns,
+  NAlert, NButton, NCard, NDataTable, NEmpty, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NRadio,
+  NRadioButton, NRadioGroup, NResult, NSelect, NSpace, NStatistic, NSwitch, NTabPane, NTabs, NTag, useDialog, useMessage,
+  type DataTableColumns,
 } from 'naive-ui'
+import AceAddrInput from '../components/AceAddrInput.vue'
+import AcePortInput from '../components/AcePortInput.vue'
+import { aceFormErrors, buildAce, emptyAceForm, hasPorts, parseAce, type AceForm, type AceProtocol } from '../ace'
 import {
   addAclEntry, bindAcl, createAcl, deleteAcl, deleteAclEntry, deleteInterface, getAclEngine, getConfig, getRole,
   refreshPendingChanges, unbindAcl, type AclEngine, type AclEngineState, type AclEntry, type DeviceConfig,
@@ -130,10 +134,39 @@ async function onDeleteEntry(acl: number, e: AclEntry) {
   await mutate(() => deleteAclEntry(acl, e.seq), `Entry ${e.seq} deleted`).catch(() => {})
 }
 
-const entryColumns = (acl: number): DataTableColumns<AclEntry> => [
-  { title: 'Seq', key: 'seq', width: 90 },
-  { title: 'Entry', key: 'ace', render: (e) => h('code', { class: 'ace' }, e.ace) },
-  {
+/** Each entry with its columns; `view` is null for a form the page can't read, shown as its text. */
+const entryRows = (acl: number) =>
+  (config.value?.acls[acl] ?? []).map((e) => ({ ...e, view: parseAce(e.ace, isStandard(acl)) }))
+type EntryRow = ReturnType<typeof entryRows>[number]
+
+function entryColumns(acl: number): DataTableColumns<EntryRow> {
+  const standard = isStandard(acl)
+  // an entry that didn't parse spans the columns from Action to the last before Actions
+  const span = standard ? 2 : 5
+  const cols: DataTableColumns<EntryRow> = [
+    { title: 'Seq', key: 'seq', width: 80 },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 90,
+      colSpan: (r) => (r.view ? 1 : span),
+      render: (r) =>
+        r.view
+          ? h(NTag, { size: 'small', type: r.view.action === 'permit' ? 'success' : 'error' }, () =>
+              r.view!.action === 'permit' ? 'Permit' : 'Deny',
+            )
+          : h('code', { class: 'ace' }, r.ace),
+    },
+  ]
+  if (!standard) cols.push({ title: 'Protocol', key: 'protocol', width: 100, render: (r) => r.view?.protocol })
+  cols.push({ title: 'Source', key: 'source', render: (r) => r.view?.source })
+  if (!standard) {
+    cols.push(
+      { title: 'Destination', key: 'destination', render: (r) => r.view?.destination },
+      { title: 'Options', key: 'options', width: 110, render: (r) => r.view?.options },
+    )
+  }
+  cols.push({
     title: 'Actions',
     key: 'ops',
     width: 90,
@@ -146,8 +179,9 @@ const entryColumns = (acl: number): DataTableColumns<AclEntry> => [
           default: () => `Delete entry ${e.seq} "${e.ace}"?`,
         },
       ),
-  },
-]
+  })
+  return cols
+}
 
 // New List dialog
 
@@ -178,25 +212,65 @@ async function onCreateList() {
   }
 }
 
-// Add Entry dialog
+// Add Entry dialog: a form, or the entry typed in the device's syntax ("Type the entry")
 
 const showAddEntry = ref(false)
 const entryAcl = ref(0)
+const entryForm = ref<AceForm>(emptyAceForm())
+const typeEntry = ref(false)
 const entryAce = ref('')
 const entrySeq = ref<number | null>(null)
 
+const protocolOptions: { label: string; value: AceProtocol }[] = [
+  { label: 'IP (any protocol)', value: 'ip' },
+  { label: 'TCP', value: 'tcp' },
+  { label: 'UDP', value: 'udp' },
+  { label: 'ICMP', value: 'icmp' },
+  { label: 'Other (by number)', value: 'other' },
+]
+
+const entryStandard = computed(() => isStandard(entryAcl.value))
+const entryPorts = computed(() => !entryStandard.value && hasPorts(entryForm.value.protocol))
+/** What the form sends, as the preview shows it. */
+const builtAce = computed(() => buildAce(entryForm.value, entryStandard.value))
+
 function openAddEntry(acl: number) {
   entryAcl.value = acl
+  entryForm.value = emptyAceForm()
+  typeEntry.value = false
   entryAce.value = ''
   entrySeq.value = null
   showAddEntry.value = true
 }
 
+/** Switching to typing starts from what the form has built so far. */
+function onTypeEntry(on: boolean) {
+  typeEntry.value = on
+  if (on && !entryAce.value.trim()) entryAce.value = builtAce.value
+}
+
+function onProtocol(p: AceProtocol) {
+  const f = entryForm.value
+  f.protocol = p
+  if (f.match === 'established' && p !== 'tcp') f.match = 'all'
+  if (f.match === 'reply' && !hasPorts(p)) f.match = 'all'
+}
+
 async function onAddEntry() {
-  const ace = entryAce.value.trim()
-  if (!ace) {
-    message.warning('Enter the entry, for example "permit tcp any any eq 22"')
-    return
+  let ace: string
+  if (typeEntry.value) {
+    ace = entryAce.value.trim()
+    if (!ace) {
+      message.warning('Enter the entry, for example "permit tcp any any eq 22"')
+      return
+    }
+  } else {
+    const errors = aceFormErrors(entryForm.value, entryStandard.value)
+    if (errors.length) {
+      message.warning(errors[0])
+      return
+    }
+    ace = builtAce.value
   }
   const acl = entryAcl.value
   submitting.value = true
@@ -204,7 +278,7 @@ async function onAddEntry() {
     await mutate(() => addAclEntry(acl, ace, entrySeq.value ?? undefined), `Entry added to list ${acl}`)
     showAddEntry.value = false
   } catch {
-    // keep the dialog open, with what was typed
+    // keep the dialog open, with what was entered
   } finally {
     submitting.value = false
   }
@@ -375,9 +449,9 @@ async function onApply() {
           </NSpace>
           <NDataTable
             :columns="entryColumns(acl)"
-            :data="config?.acls[acl] ?? []"
+            :data="entryRows(acl)"
             :loading="loading"
-            :row-key="(e: AclEntry) => e.seq"
+            :row-key="(e: EntryRow) => e.seq"
             size="small"
           />
         </NTabPane>
@@ -419,25 +493,76 @@ async function onApply() {
   <NModal
     v-model:show="showAddEntry"
     preset="card"
-    :title="`Add Entry to List ${entryAcl}`"
-    style="width: 560px"
+    :title="`Add Entry to List ${entryAcl} (${kindLabel(entryAcl).toLowerCase()})`"
+    style="width: 620px"
     :mask-closable="false"
   >
-    <NForm label-placement="left" label-width="80">
-      <NFormItem label="Entry">
+    <NForm label-placement="left" label-width="110">
+      <template v-if="!typeEntry">
+        <NFormItem label="Action">
+          <NRadioGroup v-model:value="entryForm.action">
+            <NRadioButton value="permit">Permit</NRadioButton>
+            <NRadioButton value="deny">Deny</NRadioButton>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem v-if="!entryStandard" label="Protocol">
+          <NSpace :size="8" :wrap="false">
+            <NSelect
+              :value="entryForm.protocol"
+              :options="protocolOptions"
+              style="width: 200px"
+              @update:value="onProtocol"
+            />
+            <NInputNumber
+              v-if="entryForm.protocol === 'other'"
+              v-model:value="entryForm.protoNumber"
+              :min="0" :max="255"
+              :show-button="false"
+              placeholder="0 to 255"
+              style="width: 110px"
+            />
+          </NSpace>
+        </NFormItem>
+        <NFormItem label="Source">
+          <AceAddrInput v-model="entryForm.src" />
+        </NFormItem>
+        <NFormItem v-if="entryPorts" label="Source port">
+          <AcePortInput v-model="entryForm.srcPort" />
+        </NFormItem>
+        <template v-if="!entryStandard">
+          <NFormItem label="Destination">
+            <AceAddrInput v-model="entryForm.dst" />
+          </NFormItem>
+          <NFormItem v-if="entryPorts" label="Destination port">
+            <AcePortInput v-model="entryForm.dstPort" shortcuts />
+          </NFormItem>
+          <NFormItem v-if="entryPorts" label="Match">
+            <NRadioGroup v-model:value="entryForm.match">
+              <NSpace vertical :size="4">
+                <NRadio value="all">All packets</NRadio>
+                <NRadio v-if="entryForm.protocol === 'tcp'" value="established">
+                  Established connections only (packets with ACK or RST)
+                </NRadio>
+                <NRadio value="reply">Replies to connections this device opened</NRadio>
+              </NSpace>
+            </NRadioGroup>
+          </NFormItem>
+        </template>
+      </template>
+      <NFormItem v-else label="Entry">
         <div class="field">
           <NInput
             v-model:value="entryAce"
-            :placeholder="isStandard(entryAcl) ? 'deny host 203.0.113.66' : 'permit tcp any any eq 22'"
+            :placeholder="entryStandard ? 'deny host 203.0.113.66' : 'permit tcp any any eq 22'"
             class="ace-input"
           />
-          <div v-if="isStandard(entryAcl)" class="field-hint">
+          <div v-if="entryStandard" class="field-hint">
             permit or deny, then a source: <code>any</code>, <code>host 203.0.113.66</code> or
-            <code>198.51.100.0 0.0.0.255</code>.
+            <code>198.51.100.0/24</code>.
           </div>
           <div v-else class="field-hint">
             permit or deny, a protocol, a source and a destination, for example
-            <code>permit tcp 192.168.1.0 0.0.0.255 any eq 22</code> or <code>deny ip host 203.0.113.66 any</code>.
+            <code>permit tcp 192.168.1.0/24 any eq 22</code> or <code>deny ip host 203.0.113.66 any</code>.
           </div>
         </div>
       </NFormItem>
@@ -447,11 +572,20 @@ async function onApply() {
           <div class="field-hint">1 to 65535; lower is checked first. Leave empty to add after the last entry.</div>
         </div>
       </NFormItem>
+      <NFormItem v-if="!typeEntry" label="Entry">
+        <code class="ace preview">{{ builtAce }}</code>
+      </NFormItem>
     </NForm>
     <template #footer>
-      <NSpace justify="end">
-        <NButton @click="showAddEntry = false">Cancel</NButton>
-        <NButton type="primary" :loading="submitting" @click="onAddEntry">OK</NButton>
+      <NSpace justify="space-between" align="center">
+        <NSpace :size="8" align="center">
+          <NSwitch :value="typeEntry" size="small" @update:value="onTypeEntry" />
+          <span class="muted">Type the entry</span>
+        </NSpace>
+        <NSpace>
+          <NButton @click="showAddEntry = false">Cancel</NButton>
+          <NButton type="primary" :loading="submitting" @click="onAddEntry">OK</NButton>
+        </NSpace>
       </NSpace>
     </template>
   </NModal>
@@ -497,6 +631,12 @@ async function onApply() {
   margin-top: 4px;
   font-size: 12px;
   color: #888;
+}
+.preview {
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.12);
+  word-break: break-all;
 }
 .ace,
 .ace-input :deep(input) {

@@ -49,7 +49,7 @@ Access lists (ACLs) allow or block traffic, in the same numbered, Cisco-style fo
 ### How access lists work
 
 - Each list has a number. Lists 1 to 99 are standard: they match only the source address. Lists 100 to 199 are extended: they match the protocol, source and destination addresses, and ports.
-- A list is made of entries. Each entry has a "Seq" (sequence number, 1 to 65535) and the rule itself, written in Cisco syntax, for example `permit tcp any any eq 22`.
+- A list is made of entries. Each entry has a "Seq" (sequence number, 1 to 65535), an action (Permit or Deny) and what it matches. The device stores it as a line in Cisco syntax, for example `permit tcp any any eq 22`, the same as on its command line.
 - Within a list, entries are checked in Seq order, lowest first, and the first entry that matches decides.
 - An interface applies lists to its incoming traffic: at most one standard and one extended list. A list does nothing until an interface applies it, and an interface that applies no list lets all traffic through.
 - A packet is checked against the standard list first, then the extended list:
@@ -76,11 +76,18 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 ### Access Lists
 
 - Each list has a tab with its number. Above the entries: whether it is standard or extended, and the interfaces that apply it.
-- Columns: Seq, Entry, Actions.
-- New List: click "New List" at the top right of the Access Lists card, enter a number from 1 to 199, and click "OK". The list starts empty. Creating a list that already exists changes nothing.
-- Add an entry: open the list's tab, click "Add Entry", type the entry, and click "OK". "Seq" is optional: leave it empty to add the entry after the last one (its Seq + 10). A Seq the list already has is refused.
-  - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network with a wildcard mask such as `198.51.100.0 0.0.0.255`.
-  - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`), a source, a destination, and optionally a port, for example `permit tcp 192.168.1.0 0.0.0.255 any eq 22`.
+- Columns: Seq, Action (Permit or Deny), Source, and for an extended list also Protocol, Destination and Options; then Actions. A network is shown as `198.51.100.0/24`, and a port after its address, for example "Any, port 22". An entry the page can't split into columns is shown as its Cisco text.
+- Add an entry: open the list's tab, click "Add Entry", fill in the form, and click "OK":
+  - Action: Permit or Deny.
+  - Protocol (extended lists only): IP (any protocol), TCP, UDP, ICMP, or Other, by protocol number 0 to 255.
+  - Source, and Destination (extended lists only): Any; Host, one address such as `192.168.1.10`; or Network, an address and prefix length such as `192.168.1.0/24`. The network address must have no host bits set: `192.168.1.0/24`, not `192.168.1.5/24`.
+  - Source port and Destination port (TCP and UDP only): Any port, Equal to, Range, Greater than or Less than, with port numbers 1 to 65535. The SSH 22, DNS 53, HTTP 80 and HTTPS 443 buttons fill in the destination port. The destination port is the service being reached; the source port is usually left as Any port.
+  - Match (TCP and UDP only): All packets; Established connections only (TCP: packets with ACK or RST, so replies to connections already open); or Replies to connections this device opened.
+  - Seq: optional. Leave it empty to add the entry after the last one (its Seq + 10). A Seq the list already has is refused.
+  - "Entry" at the bottom shows the line the form builds, in the device's syntax.
+- To type the entry in Cisco syntax instead, turn on "Type the entry" at the bottom left of the dialog. It starts from what the form has built.
+  - Standard entry: permit or deny, then a source: `any`, `host 203.0.113.66`, or a network such as `198.51.100.0/24` (a wildcard mask, `198.51.100.0 0.0.0.255`, works too).
+  - Extended entry: permit or deny, a protocol (`ip`, `tcp`, `udp`, `icmp`, or a number), a source, an optional source port, a destination, an optional destination port, and optionally `established` (TCP) or `reply` (TCP or UDP), for example `permit tcp 192.168.1.0/24 any eq 22`. Ports: `eq N`, `range LO HI`, `gt N`, `lt N`.
 - There is no Edit: to change an entry, add the new one and delete the old one. To put an entry between two others, give it a Seq between theirs (for example 15 between 10 and 20).
 - Delete an entry: click "Delete" on its row and confirm.
 - Delete a list: click "Delete List" on its tab and confirm. A list that an interface applies can't be deleted; remove it from the interface first.
@@ -97,12 +104,12 @@ The engine is what enforces the access lists on traffic. The card refreshes ever
 
 - Allow SSH only from the office network `192.168.1.0/24`, on eth0:
   1. Click "New List", enter 100 and click "OK".
-  2. On tab 100, click "Add Entry": `permit tcp 192.168.1.0 0.0.0.255 any eq 22`.
-  3. Add Entry: `deny tcp any any eq 22`.
-  4. Add Entry: `permit ip any any`, so other traffic still passes.
+  2. On tab 100, click "Add Entry": Action Permit, Protocol TCP, Source Network `192.168.1.0/24`, Destination Any, Destination port SSH 22. Click "OK".
+  3. Add Entry: Action Deny, Protocol TCP, Source Any, Destination Any, Destination port SSH 22.
+  4. Add Entry: Action Permit, Protocol IP (any protocol), Source Any, Destination Any, so other traffic still passes.
   5. In Interfaces, click "Apply List", enter `eth0`, choose 100, and click "OK".
   6. Click "Save Config".
-- Block one malicious host on eth0 with a standard list: create list 10, add `deny host 203.0.113.66`, apply list 10 to eth0, and click "Save Config". Other traffic still goes through, since a standard list only drops what it denies.
+- Block one malicious host on eth0 with a standard list: create list 10, add an entry with Action Deny and Source Host `203.0.113.66`, apply list 10 to eth0, and click "Save Config". Other traffic still goes through, since a standard list only drops what it denies.
 
 ## Saving the configuration
 

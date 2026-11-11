@@ -112,8 +112,14 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   ['POST', /^\/acl\/entry$/, (_, { body }) => {
     const b = body as { acl: unknown; ace: unknown; seq?: unknown }
     const acl = aclNumber(b.acl)
-    // the device writes an entry in its own form; the mock only squeezes the spaces
-    const ace = String(b.ace ?? '').trim().replace(/\s+/g, ' ')
+    // the device writes an entry in its own form: a network A.B.C.D/len as "host A", "any" or "A <wildcard>"
+    const ace = String(b.ace ?? '').trim().replace(/\s+/g, ' ').replace(/(\d+\.\d+\.\d+\.\d+)\/(\d+)/g, (_, ip, len) => {
+      const n = Number(len)
+      if (n === 32) return `host ${ip}`
+      if (n === 0) return 'any'
+      const wc = 2 ** (32 - n) - 1
+      return `${ip} ${[24, 16, 8, 0].map((sh) => (wc >>> sh) & 255).join('.')}`
+    })
     const words = ace.split(' ')
     if (words[0] !== 'permit' && words[0] !== 'deny') throw invalid(`"${ace}": must start with permit or deny`)
     if (words.length < 2) throw invalid(`"${ace}": missing the source`)
