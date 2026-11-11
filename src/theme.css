@@ -75,6 +75,11 @@
   box-shadow: 0 0 0 1px #3d444d, 0 24px 48px 0 #010409;
 }
 
+/* a selected segment's text is semibold, as in GitHub's SegmentedControl (the colors: theme.ts) */
+:root[data-theme='dark'] .n-radio-button--checked {
+  font-weight: 600;
+}
+
 html,
 body,
 #app {

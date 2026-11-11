@@ -142,6 +142,18 @@ const GITHUB_DARK: GlobalThemeOverrides = {
     textColorFocusError: '#ffffff',
     textColorDisabledError: '#f8514980',
   },
+  // Radio buttons (Permit/Deny, Any/Host/Network, ...) as GitHub's SegmentedControl: the selected
+  // item is a neutral raised segment (--controlKnob-bgColor-rest) with white text and an
+  // emphasis border, not a green fill; hover and focus aren't green either. Semibold is in theme.css.
+  Radio: {
+    buttonColorActive: '#262c36',
+    buttonTextColorActive: '#ffffff',
+    buttonBorderColorActive: '#656c76',
+    buttonBorderColorHover: '#3d444d',
+    buttonTextColorHover: '#f0f6fc',
+    buttonBoxShadowHover: 'inset 0 0 0 1px #0000',
+    buttonBoxShadowFocus: 'inset 0 0 0 1px #1f6feb, 0 0 0 2px #1f6feb4d',
+  },
   Tooltip: {
     color: '#3d444d',
     textColor: '#f0f6fc',
