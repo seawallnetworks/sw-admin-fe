@@ -3,8 +3,9 @@
  * (public/theme-init.js does it first, before the app loads, so a dark page never flashes white).
  *
  * Accent colors are for bars, borders and fills; text colors are for words, and meet 4.5:1
- * contrast on the page and card backgrounds of their theme. The dark values are GitHub's (Primer
- * "Dark default"), as are Naive UI's in the dark theme (GITHUB_DARK in src/theme.ts).
+ * contrast on the page, card and pop-up backgrounds of their theme. The dark values are GitHub's
+ * (@primer/primitives 11.10, dark.css), as are Naive UI's in the dark theme (GITHUB_DARK in
+ * src/theme.ts).
  */
 :root {
   color-scheme: light;
@@ -40,8 +41,8 @@
 
   --c-page-bg: #0d1117;
   --c-code-bg: rgba(110, 118, 129, 0.4);
-  --c-border: #30363d;
-  --c-border-strong: #484f58;
+  --c-border: #3d444d;
+  --c-border-strong: #656c76;
   --c-subtle-bg: rgba(110, 118, 129, 0.1);
   --c-subtle-bg-2: rgba(110, 118, 129, 0.2);
 
@@ -62,6 +63,16 @@
   --c-error-tint-weak: rgba(248, 81, 73, 0.08);
   --c-warning-tint: rgba(187, 128, 9, 0.15);
   --c-info-tint: rgba(56, 139, 253, 0.15);
+}
+
+/* GitHub's overlay backdrop and dialog depth; Naive UI hard-codes its mask as black at 40% */
+:root[data-theme='dark'] .n-modal-mask {
+  background-color: #21283066;
+}
+:root[data-theme='dark'] .n-card.n-modal,
+:root[data-theme='dark'] .n-dialog.n-modal {
+  /* --shadow-floating-large: a 1px ring, as Naive UI draws no border on a modal */
+  box-shadow: 0 0 0 1px #3d444d, 0 24px 48px 0 #010409;
 }
 
 html,
