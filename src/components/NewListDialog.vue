@@ -162,7 +162,7 @@ async function onCreate() {
 </script>
 
 <template>
-  <NModal :show="true" preset="card" :title="!fixed ? 'New List' : standard ? 'New Standard List' : 'New Extended List'" style="width: 1020px; max-width: calc(100vw - 32px)" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
+  <NModal :show="true" preset="card" :title="!fixed ? 'New List' : standard ? 'New Standard List' : 'New Extended List'" :style="{ width: fixed ? '880px' : '1020px', maxWidth: 'calc(100vw - 32px)' }" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
     <div class="layout">
       <NForm label-placement="top" class="form">
         <NFormItem v-if="!fixed" label="What is it for?">
