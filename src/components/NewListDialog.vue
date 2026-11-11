@@ -162,8 +162,8 @@ async function onCreate() {
 </script>
 
 <template>
-  <NModal :show="true" preset="card" :title="!fixed ? 'New List' : standard ? 'New Standard List' : 'New Extended List'" :style="{ width: fixed ? '880px' : '1020px', maxWidth: 'calc(100vw - 32px)' }" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
-    <div class="layout">
+  <NModal :show="true" preset="card" :title="!fixed ? 'New List' : standard ? 'New Standard List' : 'New Extended List'" :style="{ width: !fixed ? '1020px' : standard ? '680px' : '880px', maxWidth: 'calc(100vw - 32px)' }" :mask-closable="false" @update:show="(v: boolean) => !v && emit('close')">
+    <div class="layout" :class="{ compact: fixed && standard }">
       <NForm label-placement="top" class="form">
         <NFormItem v-if="!fixed" label="What is it for?">
           <div class="cards" role="radiogroup">
@@ -254,6 +254,13 @@ async function onCreate() {
 
 <style scoped src="./entryDialog.css"></style>
 <style scoped>
+/* New Standard List from the Apply dialog: short entries, so narrower columns still sit side by side */
+.compact .form {
+  flex-basis: 360px;
+}
+.compact .side {
+  flex-basis: 240px;
+}
 .cards {
   display: flex;
   gap: 12px;
