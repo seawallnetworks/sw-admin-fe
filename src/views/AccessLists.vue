@@ -83,7 +83,8 @@ function setMockFlows(s: string) {
       <NAlert v-if="noFlowTable" type="error" title="Critical: the ACL engine has no flow table" class="critical">
         mfwd started without sw_flowd's table of this device's own connections. Their replies no longer pass on
         their own: TCP replies still pass as <code>established</code>, and so does path MTU discovery, but replies
-        to DNS and other UDP are dropped unless a list permits them. This is a broken installation, not a state to
+        to DNS and other UDP, and other ICMP such as the replies to its pings, are dropped unless a list permits
+        them. This is a broken installation, not a state to
         run in. On the device, start sw_flowd, then restart mfwd (<code>systemctl start sw_flowd</code>,
         <code>systemctl restart mfwd</code>).
       </NAlert>

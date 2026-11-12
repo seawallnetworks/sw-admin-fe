@@ -50,7 +50,8 @@ export interface AclEngine {
   /**
    * Only when `live`: 'sw_flowd' while mfwd reads sw_flowd's table of the device's own connections, whose
    * replies then pass with no entry; 'none' without it, a broken install (Seawall proposal 0015 §6):
-   * replies fall back to "established", so UDP replies such as DNS's are dropped unless a list permits them.
+   * replies fall back to "established", so UDP replies such as DNS's, and ICMP but path MTU errors, are
+   * dropped unless a list permits them.
    */
   flows?: 'sw_flowd' | 'none'
   counters?: Record<string, number>
