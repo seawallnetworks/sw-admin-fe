@@ -54,6 +54,8 @@ const mock = {
   counters: { xdp_pass: 18342, xdp_drop: 211 },
   /** The engine state to report; 'auto' is applied, or pending just after a change. */
   engineState: 'auto' as AclEngineState | 'auto',
+  /** mfwd's flows: 'none' as when it started without sw_flowd's table. */
+  flows: 'sw_flowd' as 'sw_flowd' | 'none',
 }
 
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
@@ -96,6 +98,9 @@ const secsLeft = (now: number) =>
 
 ;(globalThis as { mockEngineState?: (s: string) => void }).mockEngineState = (s) => {
   mock.engineState = s as AclEngineState | 'auto'
+}
+;(globalThis as { mockFlows?: (s: string) => void }).mockFlows = (s) => {
+  mock.flows = s === 'none' ? 'none' : 'sw_flowd'
 }
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
@@ -240,6 +245,7 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       live: true,
       attached: names.filter(exists),
       missing: names.filter((n) => !exists(n)),
+      flows: mock.flows,
       counters: { ...mock.counters },
     }
   }],

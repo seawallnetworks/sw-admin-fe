@@ -2,7 +2,7 @@
 // Access Lists, by interface: a tab per interface (its status, "Test a packet" and its policy),
 // "Lists not in use", and the dialogs that change them. The state is in src/aclPage.ts.
 import { computed, ref } from 'vue'
-import { NButton, NCard, NEmpty, NResult, NSelect, NSpin, NTag } from 'naive-ui'
+import { NAlert, NButton, NCard, NEmpty, NResult, NSelect, NSpin, NTag } from 'naive-ui'
 import InterfacePolicy from '../components/InterfacePolicy.vue'
 import UnusedLists from '../components/UnusedLists.vue'
 import StdEntryDialog from '../components/StdEntryDialog.vue'
@@ -17,6 +17,12 @@ import { USE_MOCK, getRole } from '../api'
 const isAdmin = getRole() === 'admin'
 const page = provideAclPage()
 if (isAdmin) page.start()
+
+/**
+ * mfwd answers without sw_flowd's table: a broken install, not a state to run in (Seawall proposal 0015
+ * §6). Shown on every tab while it lasts: it concerns all interfaces.
+ */
+const noFlowTable = computed(() => !!page.engine.value?.live && page.engine.value.flows === 'none')
 
 const unusedCount = computed(() => page.unused.value.notApplied.length + page.unused.value.onlyMissing.length)
 const tabs = computed(() => [...page.ifaceNames.value, page.UNUSED_TAB])
@@ -41,6 +47,14 @@ function setMockState(s: string) {
   ;(globalThis as { mockEngineState?: (s: string) => void }).mockEngineState?.(s)
   page.pollEngine()
 }
+
+const mockFlows = ref('sw_flowd')
+const mockFlowsOptions = ['sw_flowd', 'none'].map((s) => ({ label: s, value: s }))
+function setMockFlows(s: string) {
+  mockFlows.value = s
+  ;(globalThis as { mockFlows?: (s: string) => void }).mockFlows?.(s)
+  page.pollEngine()
+}
 </script>
 
 <template>
@@ -56,6 +70,8 @@ function setMockState(s: string) {
       <span class="mock">
         Mock engine state
         <NSelect :value="mockState" :options="mockStates" size="tiny" style="width: 120px" @update:value="setMockState" />
+        Mock flows
+        <NSelect :value="mockFlows" :options="mockFlowsOptions" size="tiny" style="width: 100px" @update:value="setMockFlows" />
       </span>
     </template>
 
@@ -64,6 +80,13 @@ function setMockState(s: string) {
     </NSpin>
 
     <template v-else>
+      <NAlert v-if="noFlowTable" type="error" title="Critical: the ACL engine has no flow table" class="critical">
+        mfwd started without sw_flowd's table of this device's own connections. Their replies no longer pass on
+        their own: TCP replies still pass as <code>established</code>, and so does path MTU discovery, but replies
+        to DNS and other UDP are dropped unless a list permits them. This is a broken installation, not a state to
+        run in. On the device, start sw_flowd, then restart mfwd (<code>systemctl start sw_flowd</code>,
+        <code>systemctl restart mfwd</code>).
+      </NAlert>
       <div class="tabbar">
         <div class="tabs" role="tablist" aria-label="Interfaces" @keydown="onTabKey">
           <button
@@ -184,6 +207,9 @@ function setMockState(s: string) {
 .add-iface {
   align-self: center;
   margin: 0 4px 0 8px;
+}
+.critical {
+  margin-bottom: 12px;
 }
 .mock {
   display: inline-flex;
