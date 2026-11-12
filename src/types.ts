@@ -79,6 +79,11 @@ export interface RequestOptions {
   body?: unknown
   /** The caller handles every error itself, a 401 included: no toast, no redirect to the login page. */
   silent?: boolean
+  /**
+   * Made by the page on its own, such as a poll (see usePoller.ts): sent with `X-SW-Background: 1`, so it
+   * doesn't count as the user's activity and a page left open still times out.
+   */
+  background?: boolean
 }
 
 export class ApiError extends Error {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { NCard, NDataTable, NGi, NGrid, NStatistic, NTag, type DataTableColumns } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -11,6 +11,7 @@ import type { LineSeriesOption } from 'echarts/charts'
 import type { GridComponentOption, LegendComponentOption, TooltipComponentOption } from 'echarts/components'
 import { fetchDashboard, type BlockedEvent, type DashboardData, type EventType } from '../api'
 import { isDark } from '../theme'
+import { usePoller } from '../usePoller'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
@@ -21,44 +22,14 @@ const loading = ref(true)
 
 // ---------- polling: every 5s, paused while the tab is hidden ----------
 
-let timer: number | undefined
-let inFlight = false
-let stopped = false
-
-async function poll() {
-  window.clearTimeout(timer)
-  timer = undefined
-  if (inFlight) return
-  inFlight = true
+// an error is already surfaced by api.ts; usePoller keeps polling
+usePoller(async (background) => {
   try {
-    data.value = await fetchDashboard()
-  } catch {
-    // api.ts already surfaced the error; keep polling
+    data.value = await fetchDashboard(background)
   } finally {
-    inFlight = false
     loading.value = false
   }
-  if (!document.hidden && !stopped) timer = window.setTimeout(poll, POLL_MS)
-}
-
-function onVisibilityChange() {
-  if (document.hidden) {
-    window.clearTimeout(timer)
-    timer = undefined
-  } else {
-    poll()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('visibilitychange', onVisibilityChange)
-  poll()
-})
-onUnmounted(() => {
-  stopped = true
-  window.clearTimeout(timer)
-  document.removeEventListener('visibilitychange', onVisibilityChange)
-})
+}, POLL_MS)
 
 // ---------- view ----------
 

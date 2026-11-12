@@ -40,9 +40,11 @@ src/
   router.ts        routes and the login guard
   auth.ts          login state (token / user name / role / expiry), kept in sessionStorage
   types.ts         API types
-  api.ts           fetch wrapper and endpoint functions
+  api.ts           fetch wrapper, endpoint functions, and the session's timers
+  usePoller.ts     polling for a page; its requests are background ones
   help.ts          loads public/llms.txt and splits it into sections for the help drawer
-  mock.ts          mock backend (loaded on demand, development only)
+  mock.ts          mock backend (loaded on demand, development only);
+                   mockSession(idle, limit) in the console shortens the session
   components/      HelpDrawer (the Help button and its panel)
   views/           Login / Dashboard / AclRules / Placeholder
 ```
@@ -57,8 +59,8 @@ nginx gives `/llms.txt` to logged-in users only (see `conf/nginx.conf` in lua-re
 
 | Method | Path | Does |
 | --- | --- | --- |
-| POST | /api/session | log in: `{user, password}` → `{token, ttl, role}` |
-| GET | /api/session | current session: `{user, role, secs_left}` |
+| POST | /api/session | log in: `{user, password}` → `{token, ttl, role, idle}` |
+| GET | /api/session | current session: `{user, role, secs_left}`; extends it, unless background |
 | DELETE | /api/session | log out |
 | GET | /api/dashboard | stats cards, traffic history, recent blocked events |
 | GET | /api/acl/rules | every rule as an array (sorted by priority); search, filters and paging are done in the browser |
@@ -70,7 +72,9 @@ nginx gives `/llms.txt` to logged-in users only (see `conf/nginx.conf` in lua-re
 
 The full contract is `docs/api.md` in the backend repo lua-resty-sw-admin.
 
-- Every request but the login sends `Authorization: Bearer <token>`. The token is kept in `sessionStorage` (not `localStorage`), runs out `ttl` seconds after login and can't be renewed; the UI warns 1 minute before.
+- Every request but the login sends `Authorization: Bearer <token>`. The token is kept in `sessionStorage` (not `localStorage`). It runs out after `idle` seconds without activity, and at a time limit (12 hours by default) however active the user is (proposal 0014).
+- Every request counts as activity, except one sent with `X-SW-Background: 1`. Polls must be background ones: they go through `usePoller()`, and `src/timers.test.ts` fails on a timer anywhere else but `api.ts`. Keys, clicks, the wheel and focus in the page count too; `api.ts` sends them as a `GET /api/session` at most once a minute.
+- Replies carry the token's seconds left in `X-SW-Session-Left`, which moves the session's timers. A minute before the end the UI asks the backend again, then shows a dialog: "Stay signed in" for the idle timeout, or a notice that the time limit can't be pushed back.
 - Error bodies are `{code, error}`: branch on the status and `code`; `error` is only for showing.
 - 401: on the login, a wrong user name or password; anywhere else, the session is over and the UI goes to the login page.
 - 413 and 429 come from nginx itself as HTML pages, with no JSON body.

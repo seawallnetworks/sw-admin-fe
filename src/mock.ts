@@ -7,11 +7,16 @@ import type { AclEngine, AclEngineState, AclEntry, DashboardData, DeviceConfig, 
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
 
-const MOCK_TTL = 900
-
 const mock = {
-  /** The mock's login time is per page load, so a reload restarts the 15 minutes. */
+  /**
+   * The session, as sw_authd keeps it: it ends `idle` seconds after the last activity, and `limit` seconds
+   * after the login. Both times are per page load, so a reload starts afresh. Try the warnings with
+   * mockSession(idle, limit) in the browser console, e.g. mockSession(90, 43200) or mockSession(900, 120).
+   */
   loginAt: Date.now(),
+  activeAt: Date.now(),
+  idle: 900,
+  limit: 43_200,
   /** Whether a change was made since the last save; the real backend compares running and startup. */
   dirty: false,
   generation: 4,
@@ -80,6 +85,15 @@ const unchanged = () => ({ generation: mock.generation })
   changed()
 }
 
+;(globalThis as { mockSession?: (idle: number, limit: number) => void }).mockSession = (idle, limit) => {
+  mock.idle = idle
+  mock.limit = limit
+}
+
+/** The session's seconds left, as sw_authd counts them. */
+const secsLeft = (now: number) =>
+  Math.floor((Math.min(mock.activeAt + mock.idle * 1000, mock.loginAt + mock.limit * 1000) - now) / 1000)
+
 ;(globalThis as { mockEngineState?: (s: string) => void }).mockEngineState = (s) => {
   mock.engineState = s as AclEngineState | 'auto'
 }
@@ -88,16 +102,13 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   ['POST', /^\/session$/, (_, { body }) => {
     const { user, password } = body as { user: string; password: string }
     if (user === 'admin' && password === 'admin') {
-      mock.loginAt = Date.now()
-      return { token: '0123456789abcdef0123456789abcdef', ttl: MOCK_TTL, role: 'admin' }
+      mock.loginAt = mock.activeAt = Date.now()
+      const ttl = Math.min(mock.idle, mock.limit)
+      return { token: '0123456789abcdef0123456789abcdef', ttl, role: 'admin', idle: mock.idle }
     }
     throw new ApiError(401, 'denied', 'denied')
   }],
-  ['GET', /^\/session$/, () => ({
-    user: 'admin',
-    role: 'admin',
-    secs_left: Math.max(0, MOCK_TTL - Math.floor((Date.now() - mock.loginAt) / 1000)),
-  })],
+  ['GET', /^\/session$/, () => ({ user: 'admin', role: 'admin', secs_left: secsLeft(Date.now()) })],
   ['DELETE', /^\/session$/, () => ({})],
   ['GET', /^\/dashboard$/, () => {
     // epoch seconds, on the 5-second grid
@@ -239,12 +250,28 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   }],
 ]
 
-export async function mockRequest<T>(method: string, path: string, opts: RequestOptions): Promise<T> {
+/**
+ * One request to the mock: its reply, and the session's seconds left as the X-SW-Session-Left header
+ * would give them (null for a login). A request counts as activity unless it is a background one.
+ */
+export async function mockRequest<T>(
+  method: string,
+  path: string,
+  opts: RequestOptions,
+): Promise<{ data: T; secsLeft: number | null }> {
   await new Promise((r) => setTimeout(r, rand(100, 300)))
-  if (!(method === 'POST' && path === '/session') && !getToken()) throw new ApiError(401, 'expired', 'no token')
+  const isLogin = method === 'POST' && path === '/session'
+  if (!isLogin) {
+    if (!getToken()) throw new ApiError(401, 'expired', 'no token')
+    const now = Date.now()
+    if (secsLeft(now) <= 0) throw new ApiError(401, 'denied', 'denied')
+    if (!opts.background) mock.activeAt = now
+  }
   for (const [m, re, handler] of mockRoutes) {
     const match = m === method && path.match(re)
-    if (match) return structuredClone(handler(match, opts)) as T
+    if (match) {
+      return { data: structuredClone(handler(match, opts)) as T, secsLeft: isLogin ? null : secsLeft(Date.now()) }
+    }
   }
   throw new ApiError(404, 'invalid', `Not in the mock: ${method} ${path}`)
 }

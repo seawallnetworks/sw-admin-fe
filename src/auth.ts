@@ -11,8 +11,10 @@ export interface Session {
   token: string
   user: string
   role: Role
-  /** Epoch ms when the token runs out; it can't be renewed. */
+  /** Epoch ms when the token runs out, unless activity extends it; moved by every reply that says. */
   expiresAt: number
+  /** The backend's idle timeout in seconds, from the login. */
+  idle?: number
 }
 
 export function getSession(): Session | null {

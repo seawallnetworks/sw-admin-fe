@@ -2,7 +2,7 @@
 // and the changes every part of the page makes. AccessLists.vue creates it and provides it; the
 // components under it take it with useAclPage().
 
-import { computed, h, inject, onMounted, onUnmounted, provide, reactive, ref, type InjectionKey } from 'vue'
+import { computed, h, inject, onMounted, provide, reactive, ref, type InjectionKey } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NSpace, useDialog, useMessage } from 'naive-ui'
 import {
@@ -11,6 +11,7 @@ import {
 } from './api'
 import { parseAceRule } from './ace'
 import { interfacesUsing, isStandard, permitsTcpPort } from './policy'
+import { usePoller } from './usePoller'
 
 export type Config = DeviceConfig['config']
 
@@ -106,49 +107,32 @@ function createAclPage() {
 
   const engine = ref<AclEngine | null>(null)
   const engineError = ref<string | null>(null)
-  let timer: number | undefined
-  let inFlight = false
-  let stopped = false
   let firstPoll = true
+  let poller: { pollNow: () => Promise<void> } | null = null
 
-  async function pollEngine() {
-    window.clearTimeout(timer)
-    timer = undefined
-    if (inFlight) return
-    inFlight = true
+  async function pollEngineOnce(background: true) {
     try {
       // only the first call toasts its error; after that the status line says it
-      engine.value = await getAclEngine(!firstPoll)
+      engine.value = await getAclEngine({ silent: !firstPoll, background })
       engineError.value = null
     } catch (e) {
       engineError.value = e instanceof Error ? e.message : String(e)
     } finally {
-      inFlight = false
       firstPoll = false
     }
-    if (!document.hidden && !stopped) timer = window.setTimeout(pollEngine, POLL_MS)
   }
-  function onVisibilityChange() {
-    if (document.hidden) {
-      window.clearTimeout(timer)
-      timer = undefined
-    } else {
-      pollEngine()
-    }
+
+  /** Reads the engine's state again now, e.g. after a change; the polling goes on from there. */
+  function pollEngine() {
+    poller?.pollNow()
   }
 
   /** Starts loading and polling; for the page's setup. */
   function start() {
     onMounted(() => {
-      document.addEventListener('visibilitychange', onVisibilityChange)
       loadConfig()
-      pollEngine()
     })
-    onUnmounted(() => {
-      stopped = true
-      window.clearTimeout(timer)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    })
+    poller = usePoller(pollEngineOnce, POLL_MS)
   }
 
   // ---------- reading the configuration ----------
