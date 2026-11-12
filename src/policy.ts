@@ -254,7 +254,7 @@ export function evaluate(config: Config, iface: string, p: Packet): Verdict {
   if (p.state === 'reply') {
     said.push(
       `Stage 2: a reply to a connection this device opened passes before list ${ext}, with no entry ` +
-        '(sw_flowd records the connection; without it, only TCP replies pass so).',
+        '(sw_flowd records the connection; without it, only TCP replies and "fragmentation needed" pass so).',
     )
     return { result: 'pass', key: KEY_REPLIES, text: said.join(' ') }
   }

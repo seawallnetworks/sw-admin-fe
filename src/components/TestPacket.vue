@@ -195,7 +195,7 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
             <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
             <div v-if="f.state === 'reply'" class="hint">
               Replies pass before the extended list, with no entry, when sw_flowd tracks the connection; without it,
-              only TCP replies (ACK or RST set) pass so, and others go to the list.
+              only TCP replies (ACK or RST set) and "fragmentation needed" pass so, and others go to the list.
             </div>
           </div>
         </NFormItem>
