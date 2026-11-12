@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ipToInt, parseAddrLines, parseAddress, parseAceRule, stdAce } from './ace'
 import {
-  EXT_MAX_ENTRIES, KEY_IMPLICIT_DENY, KEY_NO_EXT, STD_MAX_ENTRIES, limitError, listFill, parseLimitRefusal, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
+  EXT_MAX_ENTRIES, KEY_IMPLICIT_DENY, KEY_NO_EXT, KEY_REPLIES, STD_MAX_ENTRIES, limitError, listFill, parseLimitRefusal, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
   nextFreeList, permitsTcpPort, placeEntries, policyRows, positionAfter, positionOptions, shadowingEntry,
   type Packet,
 } from './policy'
@@ -60,10 +60,12 @@ describe('parseAceRule', () => {
     expect(parseAceRule('permit tcp any any lt 1024', false)?.dport).toEqual({ min: 1, max: 1023 })
     expect(parseAceRule('permit ip any any', false)?.proto).toBe(0)
     expect(parseAceRule('deny 47 any any', false)?.proto).toBe(47)
-    expect(parseAceRule('permit udp any any reply', false)?.reply).toBe(true)
   })
 
   it('refuses what mini-fw refuses', () => {
+    // replies pass with no entry (Seawall proposal 0015): mini-fw refuses the keyword
+    expect(parseAceRule('permit udp any any reply', false)).toBeNull()
+    expect(parseAceRule('permit tcp any any established reply', false)).toBeNull()
     expect(parseAceRule('permit icmp any any eq 1', false)).toBeNull()
     expect(parseAceRule('permit udp any any established', false)).toBeNull()
     expect(parseAceRule('permit tcp any any gt 65535', false)).toBeNull()
@@ -113,17 +115,29 @@ describe('evaluate', () => {
     expect(evaluate(c, 'e', tcp('203.0.113.9', '10.0.0.5', 443)).text).toContain('Stage 1: no deny matches 203.0.113.9.')
   })
 
-  it('matches established on ACK or RST, which a TCP reply has too', () => {
+  it('matches established on ACK or RST', () => {
     expect(evaluate(cfg, 'eth2', tcp('192.0.2.1', '10.0.0.9', 5000)).result).toBe('drop')
     expect(evaluate(cfg, 'eth2', tcp('192.0.2.1', '10.0.0.9', 5000, { state: 'established' })).key).toBe(entryKey(100, 40))
-    expect(evaluate(cfg, 'eth2', tcp('192.0.2.1', '10.0.0.9', 5000, { state: 'reply' })).key).toBe(entryKey(100, 40))
   })
 
-  it('matches reply only for a reply', () => {
-    const c = config({ e: [100] }, { 100: ['permit udp any any reply'] })
+  it('passes a reply before the extended list, with no entry', () => {
+    const c = config({ e: [100] }, { 100: ['permit tcp any any eq 22'] })
     const udp: Packet = { proto: 17, src: ip('8.8.8.8'), dst: ip('10.0.0.5'), sport: 53, dport: 40000, state: 'new' }
-    expect(evaluate(c, 'e', udp).result).toBe('drop')
-    expect(evaluate(c, 'e', { ...udp, state: 'reply' }).result).toBe('pass')
+    expect(evaluate(c, 'e', udp)).toMatchObject({ result: 'drop', key: KEY_IMPLICIT_DENY })
+    const v = evaluate(c, 'e', { ...udp, state: 'reply' })
+    expect(v).toMatchObject({ result: 'pass', key: KEY_REPLIES })
+    expect(v.text).toContain('passes before list 100, with no entry')
+    const ping: Packet = { proto: 1, src: ip('8.8.8.8'), dst: ip('10.0.0.5'), sport: null, dport: null, state: 'reply' }
+    expect(evaluate(c, 'e', ping)).toMatchObject({ result: 'pass', key: KEY_REPLIES })
+  })
+
+  it('lets a stage 1 deny stop a reply, and not a stage 2 deny', () => {
+    const c = config({ e: [10, 100] }, { 10: ['deny host 192.0.2.1'], 100: ['deny ip host 192.0.2.2 any'] })
+    expect(evaluate(c, 'e', tcp('192.0.2.1', '10.0.0.5', 40000, { state: 'reply' })).result).toBe('drop')
+    expect(evaluate(c, 'e', tcp('192.0.2.2', '10.0.0.5', 40000, { state: 'reply' }))).toMatchObject({
+      result: 'pass',
+      key: KEY_REPLIES,
+    })
   })
 
   it('lets "ip" match every protocol, and ignores ports for ICMP', () => {
@@ -146,8 +160,9 @@ describe('policyRows', () => {
     const rows = policyRows(cfg, 'eth0')
     expect(rows.map((r) => (r.kind === 'entry' ? `${r.acl}/${r.seq}` : r.kind))).toEqual([
       'stage', '10/10', '10/20', '10/30', 'implicit',
-      'stage', '100/10', '100/20', '100/30', '100/40', '100/50', '100/60', 'implicit',
+      'stage', 'implicit', '100/10', '100/20', '100/30', '100/40', '100/50', '100/60', 'implicit',
     ])
+    expect(rows[6]).toMatchObject({ key: KEY_REPLIES, result: 'Pass', resultType: 'pass' })
     expect(rows.at(-1)).toMatchObject({ key: KEY_IMPLICIT_DENY, result: 'Drop (implicit)' })
   })
 

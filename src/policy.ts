@@ -9,12 +9,14 @@
 //   stage 1, the standard list (1-99), if bound: the first entry whose source matches decides;
 //     deny drops, permit goes on. No match goes on too, so a standard permit only matters ahead of
 //     a deny it overlaps: it exempts its sources from that deny (match_std() is first-match).
-//   stage 2, the extended list (100-199), if bound: the first entry that matches decides, permit
-//     passes and deny drops; no match drops (the implicit deny), even for an empty list. With none
+//   stage 2, the extended list (100-199), if bound: first, a reply to a connection the device
+//     opened passes, with no entry (Seawall proposal 0015 §4: sw_flowd records the device's
+//     connections; without it, TCP with ACK or RST passes so). Then the first entry that matches
+//     decides, permit passes and deny drops; no match drops (the implicit deny), even for an empty
+//     list. So a stage 1 deny stops replies, and a stage 2 deny doesn't. With no extended list
 //     bound, the packet passes.
 //   An entry's protocol "ip" (0) matches every protocol; ports count only for TCP and UDP;
-//   "established" needs TCP with ACK or RST; "reply" a reply to a connection the device opened,
-//   which for TCP also has ACK or RST, so it matches "established" too.
+//   "established" needs TCP with ACK or RST.
 //   Outgoing traffic isn't filtered, non-IPv4 always passes, and non-first fragments skip stage 2.
 
 import {
@@ -82,6 +84,8 @@ export const entryKey = (acl: number, seq: number): RowKey => `${acl}:${seq}`
 export const KEY_IMPLICIT_DENY: RowKey = 'implicit-deny'
 /** No extended list bound: the stage 2 heading is the row that passes the packet. */
 export const KEY_NO_EXT: RowKey = 'no-ext'
+/** Stage 2's first row: replies to the device's own connections pass, with no entry. */
+export const KEY_REPLIES: RowKey = 'replies'
 
 export type ResultType = 'drop' | 'pass' | 'next'
 
@@ -139,6 +143,14 @@ export function policyRows(config: Config, iface: string): PolicyRow[] {
   }
   if (ext !== null) {
     rows.push({ kind: 'stage', key: 'h2', stage: 2, acl: ext, text: `Stage 2 · Extended list ${ext}` })
+    rows.push({
+      kind: 'implicit',
+      key: KEY_REPLIES,
+      stage: 2,
+      text: 'Replies to connections this device opened (no entry needed)',
+      result: 'Pass',
+      resultType: 'pass',
+    })
     rows.push(...entryRows(config, ext))
     rows.push({ kind: 'implicit', key: KEY_IMPLICIT_DENY, stage: 2, text: 'Anything else', result: 'Drop (implicit)', resultType: 'drop' })
   } else {
@@ -155,7 +167,10 @@ export function policyRows(config: Config, iface: string): PolicyRow[] {
 
 // ---------- testing a packet ----------
 
-/** TCP: SYN only / ACK or RST set / a reply to a connection this device opened (ACK set too). */
+/**
+ * TCP: SYN only / ACK or RST set / a reply to a connection this device opened (ACK set too). UDP and
+ * ICMP: new, or a reply (an echo reply, or an error about the device's own packet).
+ */
 export type PacketState = 'new' | 'established' | 'reply'
 
 export interface Packet {
@@ -190,7 +205,6 @@ export function ruleMatches(r: AceRule, p: Packet, standard: boolean): boolean {
   if (!inRange(p.sport, r.sport) || !inRange(p.dport, r.dport)) return false
   const ackOrRst = p.proto === 6 && p.state !== 'new'
   if (r.established && !ackOrRst) return false
-  if (r.reply && p.state !== 'reply') return false
   return true
 }
 
@@ -236,6 +250,13 @@ export function evaluate(config: Config, iface: string, p: Packet): Verdict {
   if (ext === null) {
     said.push('Stage 2: no extended list, so it passes.')
     return { result: 'pass', key: KEY_NO_EXT, text: said.join(' ') }
+  }
+  if (p.state === 'reply') {
+    said.push(
+      `Stage 2: a reply to a connection this device opened passes before list ${ext}, with no entry ` +
+        '(sw_flowd records the connection; without it, only TCP replies pass so).',
+    )
+    return { result: 'pass', key: KEY_REPLIES, text: said.join(' ') }
   }
   const entries = config.acls[ext] ?? []
   for (const e of entries) {
@@ -337,7 +358,7 @@ const portsContain = (outer: PortRange | null, inner: PortRange | null) =>
 /**
  * Whether `earlier` matches every packet `r` would, so `r` behind it never matches: the same or
  * `ip` protocol, source and destination networks that contain r's, port conditions that contain
- * r's, and no flag (established, reply) that r doesn't have too.
+ * r's, and no `established` that r doesn't have too.
  */
 export function covers(earlier: AceRule, r: AceRule, standard: boolean): boolean {
   if (!netContains(earlier.src, r.src)) return false
@@ -346,7 +367,6 @@ export function covers(earlier: AceRule, r: AceRule, standard: boolean): boolean
   if (!netContains(earlier.dst, r.dst)) return false
   if (!portsContain(earlier.sport, r.sport) || !portsContain(earlier.dport, r.dport)) return false
   if (earlier.established && !r.established) return false
-  if (earlier.reply && !r.reply) return false
   return true
 }
 
@@ -368,21 +388,21 @@ export function isVeryBroad(ace: string, standard: boolean): boolean {
   const r = parseAceRule(ace, false)
   return (
     !!r && r.action === 'permit' && r.src.prefix === 0 && r.dst.prefix === 0 && !r.sport && !r.dport &&
-    !r.established && !r.reply
+    !r.established
   )
 }
 
 /**
  * Whether an extended list has a permit that lets in new TCP connections to `port` from somewhere:
- * TCP or `ip`, no source port, a destination port that includes it (or none), no established or
- * reply. The addresses aren't checked: the console's own address isn't known here.
+ * TCP or `ip`, no source port, a destination port that includes it (or none), no established.
+ * The addresses aren't checked: the console's own address isn't known here.
  */
 export function permitsTcpPort(entries: AclEntry[], port: number): boolean {
   return entries.some((e) => {
     const r = parseAceRule(e.ace, false)
     return (
       !!r && r.action === 'permit' && (r.proto === 0 || r.proto === 6) && r.sport === null &&
-      (r.dport === null || (r.dport.min <= port && port <= r.dport.max)) && !r.established && !r.reply
+      (r.dport === null || (r.dport.min <= port && port <= r.dport.max)) && !r.established
     )
   })
 }

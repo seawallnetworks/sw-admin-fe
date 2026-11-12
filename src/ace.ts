@@ -2,11 +2,14 @@
 // back, to show it in columns. The grammar is mini-fw's (`mfw help`), which sw_configd checks with:
 //
 //   standard (1-99):    permit|deny <addr>
-//   extended (100-199): permit|deny <proto> <addr> [<port>] <addr> [<port>] [established|reply]
+//   extended (100-199): permit|deny <proto> <addr> [<port>] <addr> [<port>] [established]
 //     <addr>:  any | host A.B.C.D | A.B.C.D <wildcard> | A.B.C.D/len
 //     <proto>: ip | tcp | udp | icmp | 0-255
 //     <port>:  eq N | range LO HI | gt N | lt N        (tcp/udp only)
-//   established: tcp only; reply: tcp or udp only
+//   established: tcp only
+//
+// No "reply": replies to the device's own connections pass with no entry (Seawall proposal 0015 §4),
+// and mini-fw refuses the keyword.
 //
 // The device writes every entry back in one form (mfw_format_ace): a network as "A.B.C.D <wildcard>",
 // /32 as "host A.B.C.D", /0 as "any". The form sends networks as CIDR, which it accepts too.
@@ -15,7 +18,7 @@ export type AceAction = 'permit' | 'deny'
 export type AceProtocol = 'ip' | 'tcp' | 'udp' | 'icmp' | 'other'
 export type AddrKind = 'any' | 'host' | 'network'
 export type PortOp = 'any' | 'eq' | 'range' | 'gt' | 'lt'
-export type AceMatch = 'all' | 'established' | 'reply'
+export type AceMatch = 'all' | 'established'
 
 export interface AddrField {
   kind: AddrKind
@@ -164,8 +167,7 @@ export function buildAce(f: AceForm, standard: boolean): string {
   if (standard) return `${f.action} ${addrText(f.src)}`
   const ports = hasPorts(f.protocol)
   const proto = f.protocol === 'other' ? (f.protoNumber === null ? 'N' : String(f.protoNumber)) : f.protocol
-  const match =
-    (f.match === 'established' && f.protocol === 'tcp') || (f.match === 'reply' && ports) ? ` ${f.match}` : ''
+  const match = f.match === 'established' && f.protocol === 'tcp' ? ' established' : ''
   return (
     `${f.action} ${proto} ${addrText(f.src)}${ports ? portText(f.srcPort) : ''} ` +
     `${addrText(f.dst)}${ports ? portText(f.dstPort) : ''}${match}`
@@ -182,7 +184,7 @@ export interface AceView {
   /** "Any", "Host 203.0.113.66" or "198.51.100.0/24", then ", port 22" when there is a port. */
   source: string
   destination: string
-  /** "Established", "Replies", or empty. */
+  /** "Established", or empty. */
   options: string
 }
 
@@ -241,9 +243,10 @@ export function parseAce(ace: string, standard: boolean): AceView | null {
   const [dp, i2] = readPort(words, dst[1])
   let options = ''
   let end = i2
-  if (words[end] === 'established') options = 'Established'
-  else if (words[end] === 'reply') options = 'Replies'
-  if (options) end++
+  if (words[end] === 'established') {
+    options = 'Established'
+    end++
+  }
   if (end !== words.length) return null
   return { action, protocol, source: src[0] + sp, destination: dst[0] + dp, options }
 }
@@ -274,8 +277,6 @@ export interface AceRule {
   dport: PortRange | null
   /** TCP with ACK or RST set. */
   established: boolean
-  /** A reply to a connection this device opened (TCP or UDP). */
-  reply: boolean
 }
 
 export const PROTO_NUMBERS: Record<string, number> = { ip: 0, icmp: 1, tcp: 6, udp: 17 }
@@ -344,7 +345,7 @@ export function parseAceRule(ace: string, standard: boolean): AceRule | null {
   const words = ace.trim().split(/\s+/)
   const action = words[0]
   if (action !== 'permit' && action !== 'deny') return null
-  const base = { action, sport: null, dport: null, established: false, reply: false } as const
+  const base = { action, sport: null, dport: null, established: false } as const
   if (standard) {
     const src = readNet(words, 1)
     if (!src || src[1] !== words.length) return null
@@ -364,16 +365,12 @@ export function parseAceRule(ace: string, standard: boolean): AceRule | null {
   if (!dp || (dp[0] && !ports)) return null
   let end = dp[1]
   let established = false
-  let reply = false
   if (words[end] === 'established' && proto === 6) {
     established = true
     end++
-  } else if (words[end] === 'reply' && ports) {
-    reply = true
-    end++
   }
   if (end !== words.length) return null
-  return { ...base, proto, src: src[0], sport: sp[0], dst: dst[0], dport: dp[0], established, reply }
+  return { ...base, proto, src: src[0], sport: sp[0], dst: dst[0], dport: dp[0], established }
 }
 
 // ---------- addresses typed by hand: a stage 1 source, or one line of "Several" ----------

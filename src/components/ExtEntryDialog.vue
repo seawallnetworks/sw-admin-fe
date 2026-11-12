@@ -84,7 +84,6 @@ function onProtocol(p: AceProtocol) {
   const f = form.value
   f.protocol = p
   if (f.match === 'established' && p !== 'tcp') f.match = 'all'
-  if (f.match === 'reply' && !hasPorts(p)) f.match = 'all'
 }
 
 /** A protocol number the device names is chosen by its name instead, so the port fields show; 0 is refused on Add. */
@@ -196,7 +195,6 @@ async function onAdd() {
               <NRadio v-if="form.protocol === 'tcp'" value="established">
                 Established connections only (packets with ACK or RST)
               </NRadio>
-              <NRadio value="reply">Replies to connections this device opened</NRadio>
             </NSpace>
           </NRadioGroup>
         </NFormItem>

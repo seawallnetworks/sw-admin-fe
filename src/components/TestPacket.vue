@@ -65,10 +65,15 @@ const stateOptions = computed(() =>
         { label: 'Established (ACK or RST set)', value: 'established' },
         { label: 'Reply to a connection this device opened', value: 'reply' },
       ]
-    : [
-        { label: 'New (not a reply)', value: 'new' },
-        { label: 'Reply to a connection this device opened', value: 'reply' },
-      ],
+    : f.proto === 'icmp'
+      ? [
+          { label: 'New (a ping in, ...)', value: 'new' },
+          { label: 'Reply: an echo reply, or an error about this device\'s packet', value: 'reply' },
+        ]
+      : [
+          { label: 'New (not a reply)', value: 'new' },
+          { label: 'Reply to a connection this device opened', value: 'reply' },
+        ],
 )
 // UDP has no "established"
 watch(
@@ -141,7 +146,7 @@ const packet = computed<Packet | string>(() => {
     dst,
     sport: ports.value ? f.sport : null,
     dport: ports.value ? f.dport : null,
-    state: f.proto === 'tcp' || f.proto === 'udp' ? f.state : 'new',
+    state: f.proto === 'tcp' || f.proto === 'udp' || f.proto === 'icmp' ? f.state : 'new',
   }
 })
 
@@ -185,12 +190,12 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
             />
           </NSpace>
         </NFormItem>
-        <NFormItem v-if="ports" label="Packet" :show-feedback="false">
+        <NFormItem v-if="ports || f.proto === 'icmp'" label="Packet" :show-feedback="false">
           <div style="width: 100%">
             <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
             <div v-if="f.state === 'reply'" class="hint">
-              On the device, <code>reply</code> only matches when sw_flowd tracks the connection; without it, reply
-              entries match nothing.
+              Replies pass before the extended list, with no entry, when sw_flowd tracks the connection; without it,
+              only TCP replies (ACK or RST set) pass so, and others go to the list.
             </div>
           </div>
         </NFormItem>

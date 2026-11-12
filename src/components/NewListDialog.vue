@@ -84,8 +84,6 @@ const entries = computed<AclEntry[]>(() => {
     return numbered([
       `permit tcp ${src} any eq ${CONSOLE_PORT}`,
       `permit tcp ${src} any eq 22`,
-      'permit tcp any any established',
-      'permit udp any any reply',
       'permit icmp any any',
     ])
   }
@@ -208,8 +206,8 @@ async function onCreate() {
               <NInput v-model:value="mgmt" placeholder="For example 192.168.1.0/24" :status="mgmt && mgmtError ? 'error' : undefined" />
               <div v-if="mgmt && mgmtError" class="error">{{ mgmtError }}</div>
               <div class="hint">
-                Where you manage the device from: it may reach this console (TCP {{ CONSOLE_PORT }}) and SSH. Replies to
-                connections, and ping, are let in from anywhere.
+                Where you manage the device from: it may reach this console (TCP {{ CONSOLE_PORT }}) and SSH. Ping is let
+                in from anywhere. Replies to the device's own connections need no entry: they pass before the list.
               </div>
             </div>
           </div>
