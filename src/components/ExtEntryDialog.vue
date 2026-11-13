@@ -9,7 +9,9 @@ import AcePortInput from './AcePortInput.vue'
 import {
   NAMED_PROTOCOLS, aceFormErrors, buildAce, emptyAceForm, hasPorts, type AceForm, type AceProtocol,
 } from '../ace'
-import { NO_ROOM, isVeryBroad, limitError, permitsTcpPort, placeEntries, positionOptions, shadowingEntry } from '../policy'
+import {
+  NO_ROOM, deniedHost, isVeryBroad, limitError, permitsTcpPort, placeEntries, positionOptions, shadowingEntry,
+} from '../policy'
 import { addAclEntry } from '../api'
 import { CONSOLE_PORT, consoleWarning, sharedNote, useAclPage, type EntryRequest } from '../aclPage'
 
@@ -47,6 +49,8 @@ const limitErr = computed(() => limitError(acl, entries.value.length, entries.va
 
 const shadowedBy = computed(() => (seq.value === null ? null : shadowingEntry(entries.value, ace.value, seq.value, false)))
 const veryBroad = computed(() => isVeryBroad(ace.value, false))
+/** A deny of one source host: it doesn't stop that host's replies, which pass before the list. */
+const denyHost = computed(() => deniedHost(ace.value, false))
 /** TODO(backend): with the console's interface in the API, check only that interface, and make it red. */
 const consoleCut = computed(() => {
   const on = page.appliedOn(acl)
@@ -231,6 +235,11 @@ async function onAdd() {
         <NAlert v-if="veryBroad" type="warning" :bordered="false" title="Very broad" class="warn">
           This permits all traffic from any source to any destination on every port. Entries after it never match, and
           the implicit deny no longer applies.
+        </NAlert>
+        <NAlert v-if="denyHost" type="warning" :bordered="false" title="Doesn't stop replies" class="warn">
+          Replies to this device's own connections pass before the extended list, so this doesn't stop
+          {{ denyHost }}'s replies, only connections it opens. To block {{ denyHost }} altogether, add it to the
+          interface's standard list instead.
         </NAlert>
         <NAlert v-if="consoleCut" type="warning" :bordered="false" title="The console" class="warn">
           {{ consoleWarning(consoleCut) }}

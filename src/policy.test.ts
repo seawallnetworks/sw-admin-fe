@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ipToInt, parseAddrLines, parseAddress, parseAceRule, stdAce } from './ace'
 import {
-  EXT_MAX_ENTRIES, KEY_IMPLICIT_DENY, KEY_NO_EXT, KEY_REPLIES, STD_MAX_ENTRIES, limitError, listFill, parseLimitRefusal, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
+  DENY_HOST_NOTE, EXT_MAX_ENTRIES, KEY_IMPLICIT_DENY, KEY_NO_EXT, KEY_REPLIES, STD_MAX_ENTRIES, deniedHost, limitError, listFill, parseLimitRefusal, covers, defaultStdPosition, entryKey, entryNotes, evaluate, isVeryBroad,
   nextFreeList, permitsTcpPort, placeEntries, policyRows, positionAfter, positionOptions, shadowingEntry,
   type Packet,
 } from './policy'
@@ -152,6 +152,25 @@ describe('evaluate', () => {
     const v = evaluate(c, 'e', { proto: 17, src: ip('8.8.8.8'), dst: ip('10.0.0.5'), sport: null, dport: 40000, state: 'new' })
     expect(v.result).toBe('drop')
     expect(v.text).toContain("needs a source port, and the packet's is blank")
+  })
+})
+
+describe('deniedHost', () => {
+  it('names the host of an extended deny of one source', () => {
+    expect(deniedHost('deny ip host 203.0.113.9 any', false)).toBe('203.0.113.9')
+    expect(deniedHost('deny tcp 203.0.113.9/32 any eq 22', false)).toBe('203.0.113.9')
+  })
+
+  it('says nothing of a permit, a network, any, or a standard list', () => {
+    expect(deniedHost('permit ip host 203.0.113.9 any', false)).toBeNull()
+    expect(deniedHost('deny ip 203.0.113.0 0.0.0.255 any', false)).toBeNull()
+    expect(deniedHost('deny ip any host 10.0.0.5', false)).toBeNull()
+    expect(deniedHost('deny host 203.0.113.9', true)).toBeNull()
+  })
+
+  it('notes it in the policy table', () => {
+    const notes = entryNotes([{ seq: 10, ace: 'deny ip host 203.0.113.9 any' }], false)
+    expect(notes).toEqual([{ text: DENY_HOST_NOTE, kind: 'muted' }])
   })
 })
 

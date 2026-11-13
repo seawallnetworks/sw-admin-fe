@@ -72,6 +72,7 @@ export function entryNotes(entries: AclEntry[], standard: boolean): (EntryNote |
     if (standard && r.action === 'permit' && !stdPermitHasEffect(entries, e.seq, r.src)) {
       return { text: NO_EFFECT_NOTE, kind: 'muted' }
     }
+    if (deniedHost(e.ace, standard)) return { text: DENY_HOST_NOTE, kind: 'muted' }
     return undefined
   })
 }
@@ -381,6 +382,19 @@ export function shadowingEntry(entries: AclEntry[], ace: string, seq: number, st
   }
   return null
 }
+
+/**
+ * The source host of an extended deny that names one, as "203.0.113.9"; else null. Replies to the device's
+ * own connections pass before the extended list (Seawall proposal 0015 §4), so such a deny doesn't stop that
+ * host's replies: blocking an address is the standard list's job.
+ */
+export function deniedHost(ace: string, standard: boolean): string | null {
+  if (standard) return null
+  const r = parseAceRule(ace, false)
+  return r && r.action === 'deny' && r.src.prefix === 32 ? intToIp(r.src.net) : null
+}
+
+export const DENY_HOST_NOTE = "Doesn't stop this host's replies: block it in the standard list"
 
 /** permit, from any source to any destination, on every port: in an extended list, nearly everything passes. */
 export function isVeryBroad(ace: string, standard: boolean): boolean {
