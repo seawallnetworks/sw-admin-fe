@@ -131,6 +131,18 @@ describe('evaluate', () => {
     expect(evaluate(c, 'e', ping)).toMatchObject({ result: 'pass', key: KEY_REPLIES })
   })
 
+  it('counts a UDP reply only to an ephemeral port', () => {
+    const c = config({ e: [100] }, { 100: ['permit udp any any eq 123'] })
+    const udp: Packet = { proto: 17, src: ip('8.8.8.8'), dst: ip('10.0.0.5'), sport: 53, dport: 5353, state: 'reply' }
+    const v = evaluate(c, 'e', udp)
+    expect(v).toMatchObject({ result: 'drop', key: KEY_IMPLICIT_DENY })
+    expect(v.text).toContain('only to an ephemeral port (32768 to 60999)')
+    expect(evaluate(c, 'e', { ...udp, dport: 123 })).toMatchObject({ result: 'pass', key: entryKey(100, 10) })
+    expect(evaluate(c, 'e', { ...udp, dport: 32768 }).key).toBe(KEY_REPLIES)
+    expect(evaluate(c, 'e', { ...udp, dport: 60999 }).key).toBe(KEY_REPLIES)
+    expect(evaluate(c, 'e', { ...udp, dport: 61000 }).key).toBe(KEY_IMPLICIT_DENY)
+  })
+
   it('lets a stage 1 deny stop a reply, and not a stage 2 deny', () => {
     const c = config({ e: [10, 100] }, { 10: ['deny host 192.0.2.1'], 100: ['deny ip host 192.0.2.2 any'] })
     expect(evaluate(c, 'e', tcp('192.0.2.1', '10.0.0.5', 40000, { state: 'reply' })).result).toBe('drop')

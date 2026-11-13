@@ -84,9 +84,11 @@ function setMockFlows(s: string) {
         mfwd started without sw_flowd's table of this device's own connections. Their replies no longer pass on
         their own: TCP replies still pass as <code>established</code>, and so does path MTU discovery, but replies
         to DNS and other UDP, and other ICMP such as the replies to its pings, are dropped unless a list permits
-        them. This is a broken installation, not a state to
-        run in. On the device, start sw_flowd, then restart mfwd (<code>systemctl start sw_flowd</code>,
-        <code>systemctl restart mfwd</code>).
+        them; and any TCP packet with ACK or RST set passes, a forged one too. This is a broken installation, not a
+        state to run in. mfwd's log says why. With no table, start sw_flowd, then restart mfwd
+        (<code>systemctl start sw_flowd</code>, <code>systemctl restart mfwd</code>). With a table of another
+        release's layout, install sw_flowd and mini-fw of one release, stop sw_flowd, run <code>sw_flowd -P</code>,
+        start it, then restart mfwd.
       </NAlert>
       <div class="tabbar">
         <div class="tabs" role="tablist" aria-label="Interfaces" @keydown="onTabKey">

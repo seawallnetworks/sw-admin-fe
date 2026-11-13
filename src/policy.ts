@@ -194,6 +194,9 @@ export interface Verdict {
 }
 
 const hasPorts = (proto: number) => proto === 6 || proto === 17
+
+/** sw_flowd records UDP flows sent from these ports only, Linux's default ephemeral range. */
+export const UDP_EPHEMERAL = { min: 32768, max: 60999 }
 const inRange = (p: number | null, r: PortRange | null) => r === null || (p !== null && p >= r.min && p <= r.max)
 
 /** Whether an entry matches a packet, as mfw_ext_ace_match() (or the standard list's source check) does. */
@@ -252,7 +255,14 @@ export function evaluate(config: Config, iface: string, p: Packet): Verdict {
     said.push('Stage 2: no extended list, so it passes.')
     return { result: 'pass', key: KEY_NO_EXT, text: said.join(' ') }
   }
-  if (p.state === 'reply') {
+  const udpUntracked =
+    p.state === 'reply' && p.proto === 17 && !inRange(p.dport, UDP_EPHEMERAL)
+  if (udpUntracked) {
+    said.push(
+      `Stage 2: a UDP reply counts only to an ephemeral port (${UDP_EPHEMERAL.min} to ${UDP_EPHEMERAL.max}), ` +
+        `so list ${ext} decides.`,
+    )
+  } else if (p.state === 'reply') {
     said.push(
       `Stage 2: a reply to a connection this device opened passes before list ${ext}, with no entry ` +
         '(sw_flowd records the connection; without it, only TCP replies and "fragmentation needed" pass so).',

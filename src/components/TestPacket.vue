@@ -67,7 +67,7 @@ const stateOptions = computed(() =>
       ]
     : f.proto === 'icmp'
       ? [
-          { label: 'New (a ping in, ...)', value: 'new' },
+          { label: 'New: a ping in, or anything not a reply', value: 'new' },
           { label: 'Reply: an echo reply, or an error about this device\'s packet', value: 'reply' },
         ]
       : [
@@ -194,8 +194,9 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
           <div style="width: 100%">
             <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
             <div v-if="f.state === 'reply'" class="hint">
-              Replies pass before the extended list, with no entry, when sw_flowd tracks the connection; without it,
-              only TCP replies (ACK or RST set) and "fragmentation needed" pass so, and others go to the list.
+              Replies pass before the extended list, with no entry, when sw_flowd tracks the connection: UDP only
+              to a port from 32768 to 60999. Without sw_flowd, any TCP packet with ACK or RST set and "fragmentation
+              needed" pass so, and others go to the list.
             </div>
           </div>
         </NFormItem>
