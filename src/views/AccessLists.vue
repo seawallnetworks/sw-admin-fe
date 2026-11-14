@@ -9,6 +9,7 @@ import StdEntryDialog from '../components/StdEntryDialog.vue'
 import ExtEntryDialog from '../components/ExtEntryDialog.vue'
 import ApplyListsDialog from '../components/ApplyListsDialog.vue'
 import NewListDialog from '../components/NewListDialog.vue'
+import ReplyMisses from '../components/ReplyMisses.vue'
 import { provideAclPage } from '../aclPage'
 import { isStandard } from '../policy'
 import { USE_MOCK, getRole } from '../api'
@@ -82,7 +83,7 @@ function setMockFlows(s: string) {
     <template v-else>
       <NAlert v-if="noFlowTable" type="error" title="Critical: the ACL engine has no flow table" class="critical">
         mfwd started without sw_flowd's table of this device's own connections. Their replies no longer pass on
-        their own: TCP replies still pass as <code>established</code>, and so does path MTU discovery, but replies
+        their own: TCP replies still pass as <code>established</code>, and so do path MTU discovery and DHCP, but replies
         to DNS and other UDP, and other ICMP such as the replies to its pings, are dropped unless a list permits
         them; and any TCP packet with ACK or RST set passes, a forged one too. This is a broken installation, not a
         state to run in. mfwd's log says why. With no table, start sw_flowd, then restart mfwd
@@ -136,6 +137,7 @@ function setMockFlows(s: string) {
         <UnusedLists v-if="page.tab.value === page.UNUSED_TAB" />
         <InterfacePolicy v-else-if="page.tab.value" :key="page.tab.value" :iface="page.tab.value" />
       </div>
+      <ReplyMisses v-if="page.engine.value?.live && page.engine.value.counters" :engine="page.engine.value" />
     </template>
   </NCard>
 

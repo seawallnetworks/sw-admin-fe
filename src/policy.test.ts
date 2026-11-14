@@ -132,15 +132,35 @@ describe('evaluate', () => {
   })
 
   it('counts a UDP reply only to an ephemeral port', () => {
-    const c = config({ e: [100] }, { 100: ['permit udp any any eq 123'] })
+    const c = config({ e: [100] }, { 100: ['permit udp any any eq 1234'] })
     const udp: Packet = { proto: 17, src: ip('8.8.8.8'), dst: ip('10.0.0.5'), sport: 53, dport: 5353, state: 'reply' }
     const v = evaluate(c, 'e', udp)
     expect(v).toMatchObject({ result: 'drop', key: KEY_IMPLICIT_DENY })
     expect(v.text).toContain('only to an ephemeral port (32768 to 60999)')
-    expect(evaluate(c, 'e', { ...udp, dport: 123 })).toMatchObject({ result: 'pass', key: entryKey(100, 10) })
+    expect(evaluate(c, 'e', { ...udp, dport: 1234 })).toMatchObject({ result: 'pass', key: entryKey(100, 10) })
     expect(evaluate(c, 'e', { ...udp, dport: 32768 }).key).toBe(KEY_REPLIES)
     expect(evaluate(c, 'e', { ...udp, dport: 60999 }).key).toBe(KEY_REPLIES)
     expect(evaluate(c, 'e', { ...udp, dport: 61000 }).key).toBe(KEY_IMPLICIT_DENY)
+  })
+
+  it('counts a UDP reply to 123, record_udp_ports, as ntpd sends from it', () => {
+    const c = config({ e: [100] }, { 100: ['permit tcp any any eq 22'] })
+    const ntp: Packet = { proto: 17, src: ip('203.0.113.5'), dst: ip('10.0.0.5'), sport: 123, dport: 123, state: 'reply' }
+    expect(evaluate(c, 'e', ntp).key).toBe(KEY_REPLIES)
+    expect(evaluate(c, 'e', { ...ntp, dport: 124 }).text).toContain('or to 123, so list 100 decides')
+  })
+
+  it("passes a DHCP server's answer with no entry, reply or not", () => {
+    const c = config({ e: [10, 100] }, { 10: ['deny host 192.0.2.66'], 100: ['permit tcp any any eq 22'] })
+    const dhcp: Packet = { proto: 17, src: ip('10.0.0.1'), dst: ip('255.255.255.255'), sport: 67, dport: 68, state: 'new' }
+    const v = evaluate(c, 'e', dhcp)
+    expect(v).toMatchObject({ result: 'pass', key: KEY_REPLIES })
+    expect(v.text).toContain("a DHCP server's answer")
+    expect(evaluate(c, 'e', { ...dhcp, state: 'reply' }).key).toBe(KEY_REPLIES)
+    expect(evaluate(c, 'e', { ...dhcp, sport: 66 }).key).toBe(KEY_IMPLICIT_DENY)
+    expect(evaluate(c, 'e', { ...dhcp, proto: 6 }).result).toBe('drop')
+    // the standard list still stops it
+    expect(evaluate(c, 'e', { ...dhcp, src: ip('192.0.2.66') }).result).toBe('drop')
   })
 
   it('lets a stage 1 deny stop a reply, and not a stage 2 deny', () => {

@@ -51,7 +51,7 @@ const mock = {
     // applies a list but doesn't exist, so the engine lists it as missing
     eth9: { acls_in: [110] },
   } as Record<string, { acls_in: number[] }>,
-  counters: { xdp_pass: 18342, xdp_drop: 211 },
+  counters: { xdp_pass: 18342, xdp_drop: 211, reply_miss: 2 } as Record<string, number>,
   /** The engine state to report; 'auto' is applied, or pending just after a change. */
   engineState: 'auto' as AclEngineState | 'auto',
   /** mfwd's flows: 'none' as when it started without sw_flowd's table. */
@@ -247,6 +247,12 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       missing: names.filter((n) => !exists(n)),
       flows: mock.flows,
       counters: { ...mock.counters },
+      reply_misses: [
+        { time_ms: Date.now() - 42_000, interface: 'eth0', proto: 6, src: '198.51.100.7', dst: '10.0.0.5',
+          sport: 443, dport: 41022, tcp_flags: 16, icmp_type: 0, icmp_code: 0 },
+        { time_ms: Date.now() - 600_000, interface: 'eth0', proto: 17, src: '203.0.113.5', dst: '10.0.0.5',
+          sport: 123, dport: 123, tcp_flags: 0, icmp_type: 0, icmp_code: 0 },
+      ],
     }
   }],
   ['GET', /^\/config\/pending$/, () => ({ dirty: mock.dirty })],

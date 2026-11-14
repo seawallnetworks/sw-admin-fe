@@ -195,7 +195,8 @@ watch(verdict, (v) => emit('verdict', v), { immediate: true })
             <NSelect v-model:value="f.state" :options="stateOptions" size="small" />
             <div v-if="f.state === 'reply'" class="hint">
               Replies pass before the extended list, with no entry, when sw_flowd tracks the connection: UDP only
-              to a port from 32768 to 60999. Without sw_flowd, any TCP packet with ACK or RST set and "fragmentation
+              to a port from 32768 to 60999, or to 123. A DHCP server's answers, UDP from 67 to 68, pass too, with
+              no connection. Without sw_flowd, any TCP packet with ACK or RST set and "fragmentation
               needed" pass so, and others go to the list.
             </div>
           </div>

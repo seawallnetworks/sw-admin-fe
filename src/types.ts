@@ -55,6 +55,31 @@ export interface AclEngine {
    */
   flows?: 'sw_flowd' | 'none'
   counters?: Record<string, number>
+  /**
+   * Only when `live`: the packets behind the counter `reply_miss`, newest first, at most 16 (Seawall
+   * proposal 0015 §7). They looked like replies to the device's own connections but matched none sw_flowd
+   * recorded, and the extended list dropped them.
+   */
+  reply_misses?: ReplyMiss[]
+}
+
+/** One of `reply_miss`'s samples, as sw_configd's acl_engine gives it. */
+export interface ReplyMiss {
+  /** Unix time, ms. */
+  time_ms: number
+  interface: string
+  /** IP protocol number: 6 TCP, 17 UDP, 1 ICMP. */
+  proto: number
+  src: string
+  dst: string
+  /** TCP and UDP; 0 otherwise. */
+  sport: number
+  dport: number
+  /** TCP's flags byte (16 ACK, 4 RST); 0 otherwise. */
+  tcp_flags: number
+  /** ICMP; 0 otherwise. */
+  icmp_type: number
+  icmp_code: number
 }
 
 export type EventType = 'acl_deny' | 'syn_flood' | 'http_flood' | 'cc' | 'brute_force'

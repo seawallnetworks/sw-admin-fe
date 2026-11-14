@@ -148,7 +148,7 @@ export function policyRows(config: Config, iface: string): PolicyRow[] {
       kind: 'implicit',
       key: KEY_REPLIES,
       stage: 2,
-      text: 'Replies to connections this device opened (no entry needed)',
+      text: 'Replies to connections this device opened, and DHCP answers (no entry needed)',
       result: 'Pass',
       resultType: 'pass',
     })
@@ -195,8 +195,12 @@ export interface Verdict {
 
 const hasPorts = (proto: number) => proto === 6 || proto === 17
 
-/** sw_flowd records UDP flows sent from these ports only, Linux's default ephemeral range. */
+/** sw_flowd records UDP flows sent from these ports only, Linux's default ephemeral range... */
 export const UDP_EPHEMERAL = { min: 32768, max: 60999 }
+/** ...and from these, its record_udp_ports by default: classic ntpd's 123. */
+export const UDP_RECORDED = [123]
+const udpReplyPort = (port: number | null) =>
+  inRange(port, UDP_EPHEMERAL) || (port !== null && UDP_RECORDED.includes(port))
 const inRange = (p: number | null, r: PortRange | null) => r === null || (p !== null && p >= r.min && p <= r.max)
 
 /** Whether an entry matches a packet, as mfw_ext_ace_match() (or the standard list's source check) does. */
@@ -255,12 +259,19 @@ export function evaluate(config: Config, iface: string, p: Packet): Verdict {
     said.push('Stage 2: no extended list, so it passes.')
     return { result: 'pass', key: KEY_NO_EXT, text: said.join(' ') }
   }
-  const udpUntracked =
-    p.state === 'reply' && p.proto === 17 && !inRange(p.dport, UDP_EPHEMERAL)
+  // a DHCP server's answers pass with no flow, whatever was asked of the packet (0015 §7)
+  if (p.proto === 17 && p.sport === 67 && p.dport === 68) {
+    said.push(
+      `Stage 2: a DHCP server's answer, UDP from 67 to 68, passes before list ${ext}, with no entry: ` +
+        'a first exchange is broadcast, so no connection holds it.',
+    )
+    return { result: 'pass', key: KEY_REPLIES, text: said.join(' ') }
+  }
+  const udpUntracked = p.state === 'reply' && p.proto === 17 && !udpReplyPort(p.dport)
   if (udpUntracked) {
     said.push(
-      `Stage 2: a UDP reply counts only to an ephemeral port (${UDP_EPHEMERAL.min} to ${UDP_EPHEMERAL.max}), ` +
-        `so list ${ext} decides.`,
+      `Stage 2: a UDP reply counts only to an ephemeral port (${UDP_EPHEMERAL.min} to ${UDP_EPHEMERAL.max}) ` +
+        `or to ${UDP_RECORDED.join(', ')}, so list ${ext} decides.`,
     )
   } else if (p.state === 'reply') {
     said.push(
