@@ -14,6 +14,12 @@ const count = computed(() => props.engine.counters?.reply_miss ?? 0)
 const fmtTime = (ms: number) =>
   new Date(ms).toLocaleString('en-US', { hourCycle: 'h23' }) + `.${String(ms % 1000).padStart(3, '0')}`
 const rows = computed(() => (props.engine.reply_misses ?? []).map((m, i) => missRow(m, i, fmtTime)))
+/** sw_configd gives no samples when mfwd didn't: then say so, not "none" */
+const empty = computed(() =>
+  props.engine.reply_misses === undefined
+    ? "The packets aren't available: the device couldn't get them from mfwd."
+    : 'None dropped since mfwd started.',
+)
 
 const columns: DataTableColumns<MissRow> = [
   { title: 'Time', key: 'time', width: 210 },
@@ -47,7 +53,7 @@ const columns: DataTableColumns<MissRow> = [
         size="small"
         :bordered="false"
       />
-      <NEmpty v-else size="small" description="None dropped since mfwd started." />
+      <NEmpty v-else size="small" :description="empty" />
     </NCollapseItem>
   </NCollapse>
 </template>
