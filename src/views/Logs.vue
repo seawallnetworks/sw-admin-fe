@@ -112,6 +112,11 @@ const outOfBand = () =>
     trigger: () => h(NTag, { type: 'warning', size: 'small', style: 'margin-left: 6px' }, () => 'Out of band'),
     default: () => 'Made outside the console and the CLI, with the component\'s own tool',
   })
+const truncatedTag = () =>
+  h(NTooltip, null, {
+    trigger: () => h(NTag, { size: 'small', style: 'margin-left: 6px' }, () => 'Truncated'),
+    default: () => 'A field was too long and was cut; it ends with how many bytes were cut',
+  })
 const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '-' : String(v))
 
 const auditColumns: DataTableColumns<AuditRecord> = [
@@ -121,7 +126,11 @@ const auditColumns: DataTableColumns<AuditRecord> = [
   { title: 'From', key: 'entry', render: (r) => [r.entry, r.client].filter(Boolean).join(', ') || '-' },
   { title: 'Operation', key: 'op', render: (r) => dash(r.op) },
   { title: 'Object', key: 'object', render: (r) => dash(r.object) },
-  { title: 'Result', key: 'result', render: (r) => (r.count > 0 ? `${r.count} more, summarized` : dash(r.result)) },
+  {
+    title: 'Result',
+    key: 'result',
+    render: (r) => [r.count > 0 ? `${r.count} more, summarized` : dash(r.result), r.truncated ? truncatedTag() : null],
+  },
 ]
 
 const blockColumns: DataTableColumns<BlockRecord> = [

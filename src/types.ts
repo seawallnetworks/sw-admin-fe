@@ -118,6 +118,8 @@ export interface AuditRecord {
   detail: unknown
   /** > 0: a summary of `count` more failures. */
   count: number
+  /** A field was too long and was cut, ending `…[+N bytes]`. */
+  truncated: boolean
 }
 
 /** A network voidgate blocked, or a summary of `more` of them. */
@@ -134,7 +136,10 @@ export interface BlockRecord {
   /** 'undrop', 'expired', 'reload', 'disarm', 'unknown'. */
   end_state: string | null
   rate: number | null
-  /** 'socket' (someone asked: `uid`) or 'self' (voidgate's policy); null when unknown. */
+  /**
+   * 'socket' (someone asked: `uid`), 'ban' (a gateway or an application banning through the ban
+   * socket: `uid`) or 'self' (voidgate's policy); null when unknown.
+   */
   origin: string | null
   uid: number | null
   /** Asked for outside the console and the CLI. */
@@ -151,7 +156,7 @@ export interface ChangeRecord {
   source: string
   /** 'arm', 'disarm', 'reload', 'apply', 'gap'. */
   op: string
-  /** voidgate's 'socket' or 'self'; mfwd's 'apply' or 'restart'. */
+  /** voidgate's 'socket', 'ban' or 'self'; mfwd's 'apply' or 'restart'. */
   origin: string | null
   uid: number | null
   user: string | null

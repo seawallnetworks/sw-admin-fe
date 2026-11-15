@@ -68,7 +68,7 @@ const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max
 const loadedAt = Math.floor(Date.now() / 1000)
 
 function mockAudit(): AuditRecord[] {
-  const base = { detail: null, count: 0 }
+  const base = { detail: null, count: 0, truncated: false }
   return [
     { ...base, id: 260, time: loadedAt - 60, severity: 'info', kind: 'admin', source: 'sw_configd', user: 'admin',
       entry: 'web', client: '192.168.1.20', op: 'acl entry add', object: 'access-list 100 70 permit udp any any eq 123',
@@ -81,6 +81,9 @@ function mockAudit(): AuditRecord[] {
       source: 'sw_authd', user: ['root', 'admin', 'test'][i % 3], entry: 'web', client: '203.0.113.9', op: 'login',
       object: 'user', result: 'denied',
     })),
+    { ...base, id: 253, time: loadedAt - 3550, severity: 'info', kind: 'admin', source: 'sw_configd', user: 'admin',
+      entry: 'web', client: '192.168.1.20', op: 'set description',
+      object: 'interface eth1 description ' + 'x'.repeat(200) + '…[+1800 bytes]', result: 'ok', truncated: true },
     { ...base, id: 253, time: loadedAt - 3600, severity: 'info', kind: 'admin', source: 'sw_configd', user: 'admin',
       entry: 'cli', client: '127.0.0.1', op: 'save', object: null, result: 'ok' },
     ...Array.from({ length: 150 }, (_, i) => ({
@@ -105,7 +108,7 @@ function mockBlocks(): BlockRecord[] {
     { ...b, id: 83, network: '203.0.113.66/32', reason: 'manual', started: loadedAt - 900, origin: 'socket',
       uid: 0, out_of_band: true },
     { ...b, id: 82, network: '192.0.2.44/32', reason: 'timed', started: loadedAt - 1200, ended: loadedAt - 600,
-      end_state: 'expired', origin: 'socket', uid: 33 },
+      end_state: 'expired', origin: 'ban', uid: 33 },
     { ...b, id: 81, network: '100.64.3.0/24', reason: 'aggregate', started: loadedAt - 7200,
       started_after_gap: true, ended: loadedAt - 5000, end_state: 'unknown' },
   ]
@@ -115,6 +118,8 @@ function mockChanges(): ChangeRecord[] {
   const c = { origin: 'self', uid: null, user: null, cause: null, generation: null, out_of_band: false }
   return [
     { ...c, id: 12, time: loadedAt - 50, severity: 'info', source: 'voidgate', op: 'arm', cause: 'wake-threshold' },
+    { ...c, id: 13, time: loadedAt - 20, severity: 'info', source: 'voidgate', op: 'arm', origin: 'ban', uid: 33,
+      user: 'www-data', cause: 'ban' },
     { ...c, id: 11, time: loadedAt - 330, severity: 'warning', source: 'voidgate', op: 'gap', cause: 'restart' },
     { ...c, id: 10, time: loadedAt - 900, severity: 'warning', source: 'voidgate', op: 'disarm', origin: 'socket',
       uid: 0, user: 'root', cause: 'command', out_of_band: true },

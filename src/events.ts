@@ -72,6 +72,7 @@ export function blockState(b: Pick<BlockRecord, 'ended' | 'end_state'>): string 
 export function blockOrigin(b: Pick<BlockRecord, 'origin' | 'uid'>): string {
   if (b.origin === 'self') return 'DDoS gate'
   if (b.origin === 'socket') return b.uid === null ? 'Command' : `Command (uid ${b.uid})`
+  if (b.origin === 'ban') return b.uid === null ? 'Ban client' : `Ban client (uid ${b.uid})`
   return '-'
 }
 
@@ -94,12 +95,14 @@ export function changeText(c: ChangeRecord): string {
     const gen = c.generation === null ? '' : ` (generation ${c.generation})`
     return c.origin === 'restart' ? `Saved firewall policy applied at start${gen}` : `${what}${gen}`
   }
+  if (c.cause === 'ban') return `${what}: a ban client's block`
   return c.cause ? `${what}: ${c.cause.replace(/-/g, ' ')}` : what
 }
 
 /** Who made a change. */
 export function changeWho(c: Pick<ChangeRecord, 'origin' | 'uid' | 'user'>): string {
   if (c.origin === 'self') return 'DDoS gate'
+  if (c.origin === 'ban') return `Ban client (${c.user ?? (c.uid !== null ? `uid ${c.uid}` : 'unknown')})`
   if (c.user) return c.user
   if (c.uid !== null) return `uid ${c.uid}`
   return '-'

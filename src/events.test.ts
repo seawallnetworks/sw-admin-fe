@@ -45,6 +45,7 @@ describe('blocks', () => {
   it('who asked', () => {
     expect(blockOrigin({ origin: 'self', uid: null })).toBe('DDoS gate')
     expect(blockOrigin({ origin: 'socket', uid: 0 })).toBe('Command (uid 0)')
+    expect(blockOrigin({ origin: 'ban', uid: 998 })).toBe('Ban client (uid 998)')
     expect(blockOrigin({ origin: null, uid: null })).toBe('-')
   })
 })
@@ -53,6 +54,9 @@ describe('changes', () => {
   it('says what happened', () => {
     expect(changeText(change({ op: 'arm', cause: 'wake-threshold' }))).toBe('DDoS gate armed: wake threshold')
     expect(changeText(change({ op: 'reload' }))).toBe('DDoS gate reloaded')
+    expect(changeText(change({ op: 'arm', origin: 'ban', cause: 'ban' }))).toBe(
+      "DDoS gate armed: a ban client's block",
+    )
     expect(changeText(change({ source: 'mfwd', op: 'apply', origin: 'apply', generation: 7 }))).toBe(
       'Firewall policy applied (generation 7)',
     )
@@ -69,6 +73,8 @@ describe('changes', () => {
     expect(changeWho({ origin: 'self', uid: null, user: null })).toBe('DDoS gate')
     expect(changeWho({ origin: 'socket', uid: 0, user: 'root' })).toBe('root')
     expect(changeWho({ origin: 'apply', uid: 1234, user: null })).toBe('uid 1234')
+    expect(changeWho({ origin: 'ban', uid: 998, user: 'kong' })).toBe('Ban client (kong)')
+    expect(changeWho({ origin: 'ban', uid: 998, user: null })).toBe('Ban client (uid 998)')
   })
 })
 
