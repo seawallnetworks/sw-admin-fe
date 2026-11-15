@@ -7,7 +7,8 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   NButton, NCard, NDataTable, NInput, NSelect, NSpace, NTab, NTabs, NTag, NTooltip, type DataTableColumns,
 } from 'naive-ui'
-import { fetchEvents, type Alert, type AuditRecord, type BlockRecord, type ChangeRecord, type EventLists } from '../api'
+import DiagBundle from '../components/DiagBundle.vue'
+import { fetchEvents, getRole, type Alert, type AuditRecord, type BlockRecord, type ChangeRecord, type EventLists } from '../api'
 import {
   RANGES, blockNetwork, blockOrigin, blockState, changeText, changeWho, conditionLabel, fmtDateTime, rangeSince,
   reasonLabel, severityLabel, severityType, type RangeKey,
@@ -22,6 +23,7 @@ const TABS: { key: Tab; label: string }[] = [
 ]
 const PAGE = 100
 
+const isAdmin = getRole() === 'admin'
 const route = useRoute()
 const router = useRouter()
 
@@ -188,9 +190,14 @@ const columns = computed(
       <NButton :loading="loading" @click="load(true)">Load more</NButton>
     </div>
   </NCard>
+
+  <DiagBundle v-if="isAdmin" class="diag" />
 </template>
 
 <style scoped>
+.diag {
+  margin-top: 16px;
+}
 .filters {
   margin: 12px 0;
 }

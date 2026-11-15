@@ -358,6 +358,20 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   }],
 ]
 
+/** The diagnostic bundle: mockDiagBusy(true) in the console makes it 409, as when one is being built. */
+let diagBusy = false
+;(globalThis as { mockDiagBusy?: (b: boolean) => void }).mockDiagBusy = (b) => {
+  diagBusy = b
+}
+
+export async function mockDiag(): Promise<Blob> {
+  await new Promise((r) => setTimeout(r, 1500))
+  if (!getToken()) throw new ApiError(401, 'expired', 'no token')
+  if (diagBusy) throw new ApiError(409, 'busy', 'a diagnostic bundle is already being built')
+  // not a real tar.gz: the mock only shows the download
+  return new Blob(['mock diagnostic bundle\n'], { type: 'application/gzip' })
+}
+
 /**
  * One request to the mock: its reply, and the session's seconds left as the X-SW-Session-Left header
  * would give them (null for a login). A request counts as activity unless it is a background one.

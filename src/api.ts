@@ -261,18 +261,23 @@ async function request<T>(method: string, path: string, opts: RequestOptions = {
   } catch (e) {
     const err = e instanceof ApiError ? e : new ApiError(0, null, 'Network error. Please try again later.')
     if (opts.silent) throw err
-    if (err.status === 401) {
-      // the token expired or was ended
-      message.warning('Your session has expired. Please log in again.')
-      endSession()
-    } else if (err.status === 502) {
-      message.error("The device isn't responding. Please try again.")
-    } else if (err.status === 503) {
-      message.error('The device is busy. Please try again in a few seconds.')
-    } else {
-      message.error(err.message)
-    }
+    surface(err)
     throw err
+  }
+}
+
+/** Tells the user about a failed request, as every page does; a 401 also ends the session. */
+function surface(err: ApiError) {
+  if (err.status === 401) {
+    // the token expired or was ended
+    message.warning('Your session has expired. Please log in again.')
+    endSession()
+  } else if (err.status === 502) {
+    message.error("The device isn't responding. Please try again.")
+  } else if (err.status === 503) {
+    message.error('The device is busy. Please try again in a few seconds.')
+  } else {
+    message.error(err.message)
   }
 }
 
@@ -379,6 +384,49 @@ export interface EventQuery {
 /** One page of an event list, newest first. */
 export const fetchEvents = <K extends keyof EventLists>(list: K, query: EventQuery) =>
   get<EventPage<EventLists[K]>>(`/events/${list}`, query)
+
+// ---------- the diagnostic bundle (admin only) ----------
+
+/**
+ * Downloads a diagnostic bundle, a tar.gz, and saves it as a file: fetched with the token, since a
+ * plain link can't send it. It takes seconds to minutes. Throws ApiError; a 409 (`busy`: one is
+ * already being built) is left to the caller to say, every other failure is surfaced here.
+ */
+export async function downloadDiag(): Promise<void> {
+  let blob: Blob
+  let name = 'seawall-diag.tar.gz'
+  try {
+    if (USE_MOCK) {
+      const { mockDiag } = await import('./mock')
+      blob = await mockDiag()
+    } else {
+      const token = getToken()
+      const res = await fetch(BASE + '/diag', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const left = res.headers.get('X-SW-Session-Left')
+      if (left !== null && /^\d+$/.test(left)) noteSecsLeft(token, Number(left), true)
+      if (!res.ok) {
+        const data = (res.headers.get('Content-Type') ?? '').startsWith('application/json')
+          ? await res.json().catch(() => undefined)
+          : undefined
+        throw new ApiError(res.status, data?.code ?? null, data?.error ?? `Request failed (${res.status})`)
+      }
+      name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? name
+      blob = await res.blob()
+    }
+  } catch (e) {
+    const err = e instanceof ApiError ? e : new ApiError(0, null, 'Network error. Please try again later.')
+    if (err.status !== 409) surface(err)
+    throw err
+  }
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // after the browser has taken the file
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 60_000)
+}
 
 // ---------- access lists and interfaces (admin only) ----------
 

@@ -185,6 +185,15 @@ Above the list: the time range (last hour, 24 hours, 7 days or 30 days) and the 
 
 The log keeps traffic detail for 48 hours, blocks for 7 days, and audit, changes and cleared alerts for 90 days, within a size limit; the oldest goes first.
 
+### Diagnostic bundle
+
+Administrators see a "Diagnostic Bundle" card at the bottom of the Logs page. "Download Diagnostic Bundle" builds one file (a .tar.gz) for support when something is wrong, which takes a few seconds to a few minutes, and saves it in the browser's downloads.
+
+- It holds the flow table's state, the software versions and each service's status; the data path (attached programs, interfaces, the DDoS gate's and the firewall's state, the latest blocks); the configuration with secrets replaced by ***; and the logs: everything of the last 24 hours and warnings of the last 7 days, up to 20 MB.
+- It contains clients' IP addresses. Nothing is sent anywhere: the user decides whether to send the file to support. Passwords, keys and the licence are never in it.
+- Only one bundle is built at a time. "A bundle is already being built; try again shortly." means another is being built; if it keeps saying so, the device's diagnostic service is failing, and `journalctl -u 'seawall-diag@*'` on the device says why.
+- For logs older than 24 hours, run `sudo /usr/local/seawall/sbin/seawall-diag --since "3 days ago" > diag.tar.gz` on the device.
+
 ## Alerts
 
 An alert is a condition on the device that needs attention, open until it is fixed. The most severe open one is shown at the top of every page, with "and N more open alerts" when there are others. Critical alerts mean the protection isn't working as it should.
