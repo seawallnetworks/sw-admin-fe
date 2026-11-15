@@ -82,26 +82,103 @@ export interface ReplyMiss {
   icmp_code: number
 }
 
-export type EventType = 'acl_deny' | 'syn_flood' | 'http_flood' | 'cc' | 'brute_force'
+/** Every event's severity (Seawall proposal 0012 §3). */
+export type Severity = 'info' | 'warning' | 'critical'
 
-export interface BlockedEvent {
+/** A state alert: raised by sw_logd, and later cleared. */
+export interface Alert {
+  id: number
+  /** One word, for the program: 'voidgate_unreachable', 'mfwd_no_flow_table', ... */
+  condition: string
+  severity: Severity
+  /** For a person. */
+  message: string
+  raised: number
+  /** null, or missing in GET /alerts: still open. */
+  cleared?: number | null
+}
+
+/** An audit record: a login, a change, a refused request. */
+export interface AuditRecord {
+  id: number
   time: number
-  src_ip: string
-  type: EventType
-  target: string
-  action: 'drop'
+  severity: Severity
+  /** 'admin': changes and refusals; 'login': logins, logouts, expiries, passwords. */
+  kind: string
+  /** The daemon that sent it. */
+  source: string
+  user: string | null
+  /** 'web', 'cli' or 'local'. */
+  entry: string | null
+  client: string | null
+  op: string | null
+  object: string | null
+  /** 'ok', or why not. */
+  result: string | null
+  detail: unknown
+  /** > 0: a summary of `count` more failures. */
+  count: number
+}
+
+/** A network voidgate blocked, or a summary of `more` of them. */
+export interface BlockRecord {
+  id: number
+  /** null for a summary. */
+  network: string | null
+  reason: string
+  started: number
+  /** It started while nothing was reading: `started` is when voidgate listed it. */
+  started_after_gap: boolean
+  /** null: in force. */
+  ended: number | null
+  /** 'undrop', 'expired', 'reload', 'disarm', 'unknown'. */
+  end_state: string | null
+  rate: number | null
+  /** 'socket' (someone asked: `uid`) or 'self' (voidgate's policy); null when unknown. */
+  origin: string | null
+  uid: number | null
+  /** Asked for outside the console and the CLI. */
+  out_of_band: boolean
+  more: number
+}
+
+/** A state change: voidgate's arm, disarm, reload; mfwd's apply; a gap in either. */
+export interface ChangeRecord {
+  id: number
+  time: number
+  severity: Severity
+  /** 'voidgate' or 'mfwd'. */
+  source: string
+  /** 'arm', 'disarm', 'reload', 'apply', 'gap'. */
+  op: string
+  /** voidgate's 'socket' or 'self'; mfwd's 'apply' or 'restart'. */
+  origin: string | null
+  uid: number | null
+  user: string | null
+  cause: string | null
+  /** mfwd's policy generation, for an apply. */
+  generation: number | null
+  out_of_band: boolean
+}
+
+/** A page of an event list, newest first; pass `next` as `before` for the one after, null at the end. */
+export interface EventPage<T> {
+  records: T[]
+  next: number | null
 }
 
 export interface DashboardData {
-  inbound_pps: number
-  dropped_pps: number
-  /** Entries in the access lists that interfaces apply. */
-  active_acl_rules: number
-  syn_protection: boolean
-  /** Oldest first, one point every 5 seconds. */
-  traffic: { time: number; inbound_pps: number; dropped_pps: number }[]
-  /** Newest first, at most 10. */
-  events: BlockedEvent[]
+  /** voidgate's latest 10-second interval; null when there is none recent: show "-". */
+  inbound_pps: number | null
+  dropped_pps: number | null
+  /** Entries in the access lists that interfaces apply; null when unknown. */
+  active_acl_rules: number | null
+  /** Oldest first, one point every 10 seconds; null rates are a gap, drawn as a break. */
+  traffic: { time: number; inbound_pps: number | null; dropped_pps: number | null }[]
+  /** The latest blocks of the last 24 hours, newest first, at most 10. */
+  blocks: Pick<BlockRecord, 'network' | 'reason' | 'started' | 'ended' | 'more'>[]
+  /** The open alerts, most severe first. */
+  alerts: Alert[]
 }
 
 export type Role = 'admin' | 'user'

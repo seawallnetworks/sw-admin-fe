@@ -1,10 +1,10 @@
 # Seawall Admin Console User Manual
 
-> Seawall is a network protection device. The Admin Console is its web interface: watch traffic and blocked events, manage access lists (ACLs) and the interfaces that apply them, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
+> Seawall is a network protection device. The Admin Console is its web interface: watch traffic, blocks and alerts, read the log of who did what, manage access lists (ACLs) and the interfaces that apply them, and save the configuration. This file is for AI assistants helping a user of the console: when they ask how to use a feature, answer from this manual and use the exact names shown in the interface (menus, buttons, fields).
 
 ## For AI assistants
 
-- Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection and Logs pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
+- Describe only what this manual covers. The DDoS Protection, HTTP Flood, CC Protection and Brute-Force Protection pages currently show "Coming soon" and can't be used yet; don't invent settings for them.
 - Access list changes (adding or deleting an entry or a list, applying a list to an interface or removing it) take effect as soon as the user clicks the dialog's button or confirms, but they are not saved: a device restart loses them until someone clicks "Save Config" at the top right. Users often miss this, so mention it when it's relevant.
 - Applying an extended list (100 to 199) to an interface drops all incoming traffic the list doesn't permit, and that can cut off the user's own connection to the console. The console refuses to apply an empty extended list, and to delete the last entry of one an interface applies. Before suggesting it, make sure the list permits what must keep working, such as the console itself (TCP port 8443); "Basic protection" in New List does. "Test a packet" on the interface's tab shows what a list would do to a given packet. If the user is already cut off, restarting the device restores the saved configuration, as long as the change wasn't saved with "Save Config".
 - If you don't know, say so, and suggest the user ask their device administrator.
@@ -25,6 +25,7 @@
 
 - Menu on the left: Dashboard, Access Lists, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
 - Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only), the theme button, the "Help" button and the user name menu.
+- Alert banner: when something on the device needs attention, a colored box at the top of every page names it (see Alerts).
 - Theme: the round icon button in the header, left of "Help" (a half-filled circle, a sun or a moon, for the current choice). Click it and choose System (the default: light or dark as the computer is set), Light or Dark. The choice is kept in this browser only.
 - "Help" opens a panel with the help for the current page. "Full manual" at the bottom of the panel shows this whole manual, and "This page" goes back.
 
@@ -35,14 +36,15 @@
 
 ## Dashboard
 
-Shows the device's live state. It refreshes every 5 seconds (paused while the browser tab is in the background, and refreshed at once when you come back to it).
+Shows the device's live state. It refreshes every 10 seconds (paused while the browser tab is in the background, and refreshed at once when you come back to it).
 
-- Inbound (pps): packets per second coming into the device now.
-- Dropped (pps): packets per second the device is blocking and dropping now.
+- Inbound (pps): packets per second reaching the device's DDoS gate, over the last 10 seconds.
+- Dropped (pps): packets per second the DDoS gate dropped, over the last 10 seconds.
 - Active ACL Entries: how many access list entries are in effect: the entries of the lists that interfaces apply.
-- SYN Protection: whether SYN flood protection is on ("On" or "Off").
-- Traffic: inbound and dropped traffic over time. Hover over the chart to see the values at a moment; click a legend entry to hide or show that line.
-- Recent Blocked Events: the latest blocked traffic, at most 10 entries, newest first. Columns: Time, Source IP, Type, Target, Action. Types: ACL deny, SYN Flood, HTTP Flood, CC attack, Brute force. The action is currently always "Drop".
+- A "-" in place of a number means the console has no recent figure: the DDoS gate or the event store isn't running. It doesn't mean zero.
+- Traffic, last 15 minutes: inbound and dropped traffic, a point every 10 seconds. A break in the lines is a time with no data (the DDoS gate was restarting, for example), not a drop to zero. Hover over the chart to see the values at a moment; click a legend entry to hide or show that line.
+- Latest Blocks: the networks the DDoS gate blocked in the last 24 hours, newest first, at most 10: when, the network, the reason, and whether the block is still in force. "All blocks" opens them on the Logs page.
+- Open Alerts: the conditions that need attention now. "History" opens past alerts on the Logs page.
 
 ## Access Lists
 
@@ -168,6 +170,32 @@ Opened by "+ Another interface" after the interface tabs, "Change list" or "Add 
   4. Click "Save Config".
 - Block one malicious host on eth0: on the eth0 tab, in Stage 1 click "Add Entry" (or "Add a standard list" first if there is none), keep Deny (block) and Host, enter `203.0.113.66`, and click "Add Entry". Then "Save Config". Other traffic is unaffected, since a standard list only drops what it denies.
 
+## Logs
+
+What happened on the device, newest first, from its event store. Four tabs:
+
+- Audit: who did what. Logins (and failed ones), logouts, sessions that expired, password changes, and every configuration change or refused request, from the console ("web") or the command line ("cli"), with the user, the address they came from, the operation, what it was done to, and the result ("ok", or why not). Many failed logins from one address are summarized in one row, "N more, summarized", so an attack doesn't flood the log.
+- Blocks: the networks the DDoS gate blocked: when, the network, the reason (Policy and Aggregate: the gate's own decision during an attack; Manual: someone asked; Timed ban: a ban that lifts itself), who asked, and whether it is still in force or how it ended (Lifted, Expired, Disarmed, or "Ended (time unknown)" when it ended while the log wasn't recording). A row "N more networks" stands for blocks past the number the log keeps one by one during an attack. "or earlier" after a time: the block started while the log wasn't recording, at that time or before.
+- State Changes: the DDoS gate armed, disarmed or reloaded, and new firewall policies applied, with who did it. "Changes missed" means the log couldn't follow for a while (the component restarted, for example).
+- Alerts: alerts open at any time in the range, and when each was cleared.
+
+Above the list: the time range (last hour, 24 hours, 7 days or 30 days) and the filters for the tab: severity (Warning and above, Critical), the kind of audit record (changes and refusals, or logins), a user, a network, or the component. Press Enter in a text filter, or click Refresh, to search. "Load more" at the bottom shows older records.
+
+"Out of band" on a block or a change means it was made outside the console and the command line, with the component's own tool on the device (voidgatectl or mfw), usually by someone logged in to it. If nobody expected that, find out who did it.
+
+The log keeps traffic detail for 48 hours, blocks for 7 days, and audit, changes and cleared alerts for 90 days, within a size limit; the oldest goes first.
+
+## Alerts
+
+An alert is a condition on the device that needs attention, open until it is fixed. The most severe open one is shown at the top of every page, with "and N more open alerts" when there are others. Critical alerts mean the protection isn't working as it should.
+
+- DDoS gate unreachable, Firewall engine unreachable: the console can't read that component; it may have stopped. Ask the administrator to check it on the device.
+- DDoS gate: no flow table, Firewall: no flow table (critical): the component started without the table of the device's own connections, so replies to the device's own traffic (DNS, updates, pings) may be dropped. The message says what to do, usually start sw_flowd and then restart the component.
+- DDoS gate degraded, Firewall degraded: another program holds the network interface's fast path, so the component runs in a slower mode.
+- Firewall: interfaces missing: an interface the access lists are applied to doesn't exist on the device, so nothing is filtered there.
+- Event store unavailable (critical): the device can't record events, for example because its disk is full; the dashboard and the logs miss what happens meanwhile.
+- Event store too small: the log's size limit removed old audit records; ask the administrator to raise it.
+
 ## Saving the configuration
 
 - Access list changes take effect at once but live only in the device's running state. The "Unsaved changes" tag in the header means the running configuration differs from the one the device loads when it starts.
@@ -183,5 +211,6 @@ Opened by "+ Another interface" after the interface tabs, "Change list" or "Add 
 - I can't see the access lists. Your account is a user, not an administrator; only administrators can view or change them.
 - My rules were gone after the device restarted. The changes weren't saved with "Save Config". Ask an administrator to save after making changes.
 - I can't see the "Save Config" button. Your account is a user, not an administrator; ask an administrator to save.
+- "Alerts can't be read: the event store isn't responding." The device's event store (sw_logd) isn't running; the dashboard and the Logs page can't show anything until it is. Ask the administrator to check it.
 - "Network error. Please try again later." The browser can't reach the device. Check your network connection and reload the page.
 - "Request failed" or another error after an action. Try again later; if it keeps happening, contact the administrator.

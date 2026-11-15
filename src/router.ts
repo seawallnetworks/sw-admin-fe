@@ -8,13 +8,13 @@ export const router = createRouter({
   routes: [
     { path: '/login', component: () => import('./views/Login.vue'), meta: { title: 'Log In', public: true } },
     { path: '/', redirect: '/dashboard' },
-    { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: 'Dashboard', help: ['Dashboard'] } },
+    { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: 'Dashboard', help: ['Dashboard', 'Alerts'] } },
     { path: '/acl', component: () => import('./views/AccessLists.vue'), meta: { title: 'Access Lists', help: ['Access Lists', 'Saving the configuration', 'Common questions'] } },
     { path: '/ddos', component: placeholder, meta: { title: 'DDoS Protection' } },
     { path: '/http-flood', component: placeholder, meta: { title: 'HTTP Flood' } },
     { path: '/cc', component: placeholder, meta: { title: 'CC Protection' } },
     { path: '/brute-force', component: placeholder, meta: { title: 'Brute-Force Protection' } },
-    { path: '/logs', component: placeholder, meta: { title: 'Logs' } },
+    { path: '/logs', component: () => import('./views/Logs.vue'), meta: { title: 'Logs', help: ['Logs', 'Alerts'] } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 })

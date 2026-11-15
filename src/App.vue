@@ -5,6 +5,7 @@ import {
   NButton, NConfigProvider, NDialogProvider, NDropdown, NIcon, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider,
   NMenu, NMessageProvider, NSpace, NTag, NTooltip, dateEnUS, enUS, type DropdownOption, type MenuOption,
 } from 'naive-ui'
+import AlertBanner from './components/AlertBanner.vue'
 import HelpDrawer from './components/HelpDrawer.vue'
 import ThemeSwitch from './components/ThemeSwitch.vue'
 import {
@@ -117,6 +118,7 @@ function onUserSelect(key: string) {
               </NSpace>
             </NLayoutHeader>
             <NLayoutContent content-style="padding: 20px;" class="content">
+              <AlertBanner />
               <RouterView />
             </NLayoutContent>
           </NLayout>

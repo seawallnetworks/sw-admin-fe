@@ -3,7 +3,10 @@
 
 import { getToken } from './auth'
 import { ApiError } from './types'
-import type { AclEngine, AclEngineState, AclEntry, DashboardData, DeviceConfig, EventType, RequestOptions } from './types'
+import type {
+  AclEngine, AclEngineState, AclEntry, Alert, AuditRecord, BlockRecord, ChangeRecord, DashboardData, DeviceConfig,
+  EventPage, RequestOptions,
+} from './types'
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
 
@@ -59,6 +62,82 @@ const mock = {
 }
 
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
+
+// ---------- events, as sw_logd would have them: newest first, fixed for a page load ----------
+
+const loadedAt = Math.floor(Date.now() / 1000)
+
+function mockAudit(): AuditRecord[] {
+  const base = { detail: null, count: 0 }
+  return [
+    { ...base, id: 260, time: loadedAt - 60, severity: 'info', kind: 'admin', source: 'sw_configd', user: 'admin',
+      entry: 'web', client: '192.168.1.20', op: 'acl entry add', object: 'access-list 100 70 permit udp any any eq 123',
+      result: 'ok' },
+    { ...base, id: 259, time: loadedAt - 400, severity: 'warning', kind: 'login', source: 'sw_authd', user: 'admin',
+      entry: 'web', client: '203.0.113.9', op: 'login', object: '12 more failures across 3 usernames',
+      result: 'summarized', count: 12 },
+    ...Array.from({ length: 5 }, (_, i) => ({
+      ...base, id: 254 + i, time: loadedAt - 460 - i * 5, severity: 'warning' as const, kind: 'login',
+      source: 'sw_authd', user: ['root', 'admin', 'test'][i % 3], entry: 'web', client: '203.0.113.9', op: 'login',
+      object: 'user', result: 'denied',
+    })),
+    { ...base, id: 253, time: loadedAt - 3600, severity: 'info', kind: 'admin', source: 'sw_configd', user: 'admin',
+      entry: 'cli', client: '127.0.0.1', op: 'save', object: null, result: 'ok' },
+    ...Array.from({ length: 150 }, (_, i) => ({
+      ...base, id: 252 - i, time: loadedAt - 4000 - i * 500, severity: 'info' as const,
+      kind: i % 2 ? 'login' : 'admin', source: i % 2 ? 'sw_authd' : 'sw_configd', user: 'admin',
+      entry: 'web', client: '192.168.1.20', op: i % 2 ? 'login' : 'set hostname', object: i % 2 ? 'user' : 'sw1',
+      result: 'ok',
+    })),
+  ]
+}
+
+function mockBlocks(): BlockRecord[] {
+  const b = {
+    started_after_gap: false, ended: null, end_state: null, rate: null, origin: 'self', uid: null,
+    out_of_band: false, more: 0,
+  }
+  return [
+    { ...b, id: 90, network: null, reason: 'policy', started: loadedAt - 30, more: 1250 },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      ...b, id: 84 + i, network: `198.18.${i}.0/24`, reason: 'aggregate', started: loadedAt - 40 - i * 3,
+    })),
+    { ...b, id: 83, network: '203.0.113.66/32', reason: 'manual', started: loadedAt - 900, origin: 'socket',
+      uid: 0, out_of_band: true },
+    { ...b, id: 82, network: '192.0.2.44/32', reason: 'timed', started: loadedAt - 1200, ended: loadedAt - 600,
+      end_state: 'expired', origin: 'socket', uid: 33 },
+    { ...b, id: 81, network: '100.64.3.0/24', reason: 'aggregate', started: loadedAt - 7200,
+      started_after_gap: true, ended: loadedAt - 5000, end_state: 'unknown' },
+  ]
+}
+
+function mockChanges(): ChangeRecord[] {
+  const c = { origin: 'self', uid: null, user: null, cause: null, generation: null, out_of_band: false }
+  return [
+    { ...c, id: 12, time: loadedAt - 50, severity: 'info', source: 'voidgate', op: 'arm', cause: 'wake-threshold' },
+    { ...c, id: 11, time: loadedAt - 330, severity: 'warning', source: 'voidgate', op: 'gap', cause: 'restart' },
+    { ...c, id: 10, time: loadedAt - 900, severity: 'warning', source: 'voidgate', op: 'disarm', origin: 'socket',
+      uid: 0, user: 'root', cause: 'command', out_of_band: true },
+    { ...c, id: 9, time: loadedAt - 3600, severity: 'info', source: 'mfwd', op: 'apply', origin: 'apply', uid: 998,
+      user: 'sw_configd', generation: 7 },
+    { ...c, id: 8, time: loadedAt - 86000, severity: 'info', source: 'mfwd', op: 'apply', origin: 'restart', uid: 0,
+      user: 'root', generation: 1 },
+  ]
+}
+
+function mockAlerts(): Alert[] {
+  const alerts: Alert[] = [
+    { id: 3, condition: 'mfwd_missing_interfaces', severity: 'warning', raised: loadedAt - 7200, cleared: null,
+      message: 'mfwd: bound interfaces not present, so not filtered: eth9' },
+    { id: 2, condition: 'voidgate_unreachable', severity: 'warning', raised: loadedAt - 400,
+      cleared: loadedAt - 330, message: "voidgate's read-only socket can't be read: connection refused" },
+  ]
+  if (mock.flows === 'none') {
+    alerts.unshift({ id: 4, condition: 'mfwd_no_flow_table', severity: 'critical', raised: loadedAt, cleared: null,
+      message: 'mfwd: no sw_flowd flow table; replies to the host\'s own flows fall back to "established"' })
+  }
+  return alerts
+}
 
 const invalid = (msg: string) => new ApiError(400, 'invalid', msg)
 const isStandard = (acl: number) => acl < 100
@@ -116,32 +195,49 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
   ['GET', /^\/session$/, () => ({ user: 'admin', role: 'admin', secs_left: secsLeft(Date.now()) })],
   ['DELETE', /^\/session$/, () => ({})],
   ['GET', /^\/dashboard$/, () => {
-    // epoch seconds, on the 5-second grid
-    const now = Math.floor(Date.now() / 5000) * 5
-    const traffic = Array.from({ length: 30 }, (_, i) => {
-      const time = now - (29 - i) * 5
+    // epoch seconds, on the 10-second grid; a gap of a minute, 5 minutes ago, as when voidgate restarts
+    const now = Math.floor(Date.now() / 10000) * 10
+    const traffic = Array.from({ length: 90 }, (_, i) => {
+      const time = now - (89 - i) * 10
+      if (i >= 55 && i < 61) return { time, inbound_pps: null, dropped_pps: null }
       const inbound_pps = Math.round(120000 + 40000 * Math.sin(time / 60) + rand(0, 15000))
       return { time, inbound_pps, dropped_pps: Math.round(inbound_pps * (0.05 + Math.random() * 0.1)) }
     })
     const last = traffic[traffic.length - 1]
-    const types: EventType[] = ['acl_deny', 'syn_flood', 'http_flood', 'cc', 'brute_force']
-    let t = now
     return {
       inbound_pps: last.inbound_pps,
       dropped_pps: last.dropped_pps,
       active_acl_rules: Object.values(mock.interfaces)
         .flatMap((i) => i.acls_in)
         .reduce((n, acl) => n + (mock.acls[acl]?.length ?? 0), 0),
-      syn_protection: true,
       traffic,
-      events: Array.from({ length: 10 }, () => ({
-        time: (t -= rand(3, 20)),
-        src_ip: `${rand(1, 223)}.${rand(0, 255)}.${rand(0, 255)}.${rand(1, 254)}`,
-        type: types[rand(0, types.length)],
-        target: `10.0.0.${rand(2, 30)}:${[80, 443, 22][rand(0, 3)]}`,
-        action: 'drop' as const,
+      blocks: mockBlocks().slice(0, 10).map(({ network, reason, started, ended, more }) => ({
+        network, reason, started, ended, more,
       })),
+      alerts: mockAlerts().filter((a) => !a.cleared),
     } satisfies DashboardData
+  }],
+  ['GET', /^\/alerts$/, () => ({ records: mockAlerts().filter((a) => !a.cleared) })],
+  ['GET', /^\/events\/(audit|blocks|changes|alerts)$/, (m, { query }) => {
+    type Row = { id: number } & Record<string, unknown>
+    const lists: Record<string, () => Row[]> = {
+      audit: () => mockAudit() as unknown as Row[],
+      blocks: () => mockBlocks() as unknown as Row[],
+      changes: () => mockChanges() as unknown as Row[],
+      alerts: () => mockAlerts() as unknown as Row[],
+    }
+    if (query?.since === undefined) throw new ApiError(400, 'invalid', 'since: required, Unix seconds')
+    let records = lists[m[1]]()
+    const sev = { info: 0, warning: 1, critical: 2 } as Record<string, number>
+    for (const [k, v] of Object.entries(query ?? {})) {
+      if (v === undefined || v === '' || ['since', 'until', 'limit', 'before'].includes(k)) continue
+      records = records.filter((r) => (k === 'severity' ? sev[String(r.severity)] >= sev[String(v)] : r[k] === v))
+    }
+    const before = Number(query?.before ?? Infinity)
+    const limit = Number(query?.limit ?? 100)
+    const page = records.filter((r) => r.id < before).slice(0, limit)
+    const more = records.filter((r) => r.id < before).length > limit
+    return { records: page, next: more ? page[page.length - 1].id : null } satisfies EventPage<unknown>
   }],
   ['GET', /^\/config$/, (): DeviceConfig => ({
     generation: mock.generation,

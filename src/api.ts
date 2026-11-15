@@ -4,7 +4,10 @@ import { router } from './router'
 import { clearSession, getRole, getSession, getToken, setSession, type Session } from './auth'
 import { ApiError } from './types'
 import { naiveTheme } from './theme'
-import type { AclEngine, ChangeReply, DashboardData, DeviceConfig, RequestOptions, Role } from './types'
+import type {
+  AclEngine, Alert, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, DashboardData, DeviceConfig, EventPage,
+  RequestOptions, Role,
+} from './types'
 
 export * from './types'
 export { getRole, getToken, getUsername } from './auth'
@@ -346,6 +349,36 @@ export function ensureSession(): Promise<boolean> {
 
 /** `background` for a poll; see usePoller.ts. */
 export const fetchDashboard = (background?: boolean) => get<DashboardData>('/dashboard', undefined, { background })
+
+// ---------- events, from sw_logd ----------
+
+/**
+ * The open alerts, for the banner every page shows; polled. Silent: the banner shows its own errors, so a
+ * stopped sw_logd doesn't raise a message every 10 seconds.
+ */
+export const fetchOpenAlerts = (background?: boolean) =>
+  get<{ records: Alert[] }>('/alerts', undefined, { background, silent: true })
+
+/** What each event list is, and the filters it takes. */
+export interface EventLists {
+  audit: AuditRecord
+  blocks: BlockRecord
+  changes: ChangeRecord
+  alerts: Alert
+}
+
+/** The query of an event list: `since` required, Unix seconds; `before` a page's `next`. */
+export interface EventQuery {
+  since: number
+  until?: number
+  limit?: number
+  before?: number
+  [filter: string]: string | number | undefined
+}
+
+/** One page of an event list, newest first. */
+export const fetchEvents = <K extends keyof EventLists>(list: K, query: EventQuery) =>
+  get<EventPage<EventLists[K]>>(`/events/${list}`, query)
 
 // ---------- access lists and interfaces (admin only) ----------
 

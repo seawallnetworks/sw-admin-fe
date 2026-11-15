@@ -42,11 +42,12 @@ src/
   types.ts         API types
   api.ts           fetch wrapper, endpoint functions, and the session's timers
   usePoller.ts     polling for a page; its requests are background ones
+  events.ts        labels and text for the events: alerts, blocks, state changes
   help.ts          loads public/llms.txt and splits it into sections for the help drawer
   mock.ts          mock backend (loaded on demand, development only);
                    mockSession(idle, limit) in the console shortens the session
-  components/      HelpDrawer (the Help button and its panel)
-  views/           Login / Dashboard / AclRules / Placeholder
+  components/      HelpDrawer (the Help button and its panel), AlertBanner (open alerts, on every page)
+  views/           Login / Dashboard / AccessLists / Logs / Placeholder
 ```
 
 ## User manual for AI assistants
