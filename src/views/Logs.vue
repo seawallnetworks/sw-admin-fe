@@ -27,7 +27,9 @@ const isAdmin = getRole() === 'admin'
 const route = useRoute()
 const router = useRouter()
 
-const tab = ref<Tab>(TABS.some((t) => t.key === route.query.tab) ? (route.query.tab as Tab) : 'audit')
+/** The tab the URL names (?tab=), or Audit. */
+const tabOf = (q: unknown): Tab => (TABS.some((t) => t.key === q) ? (q as Tab) : 'audit')
+const tab = ref<Tab>(tabOf(route.query.tab))
 const range = ref<RangeKey>('24h')
 const filters = reactive({ severity: '', user: '', network: '', source: '', kind: '' })
 
@@ -91,7 +93,16 @@ async function load(more = false) {
 }
 
 watch([tab, range, () => filters.severity, () => filters.kind, () => filters.source], () => load(), { immediate: true })
-watch(tab, (t) => router.replace({ query: { ...route.query, tab: t } }))
+watch(tab, (t) => {
+  if (route.query.tab !== t) router.replace({ query: { ...route.query, tab: t } })
+})
+// a link to another tab while this page is open, such as the alert banner's
+watch(
+  () => route.query.tab,
+  (q) => {
+    if (q !== undefined && tabOf(q) !== tab.value) tab.value = tabOf(q)
+  },
+)
 
 // ---------- columns ----------
 
