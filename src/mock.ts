@@ -4,8 +4,8 @@
 import { getToken } from './auth'
 import { ApiError } from './types'
 import type {
-  AclEngine, AclEngineState, AclEntry, Alert, AuditRecord, BlockRecord, ChangeRecord, DashboardData, DeviceConfig,
-  EventPage, RequestOptions,
+  AclEngine, AclEngineState, AclEntry, Alert, AuditRecord, BlockRecord, ChangeRecord, ConfigPending, DashboardData,
+  DeviceConfig, EventPage, RequestOptions,
 } from './types'
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
@@ -22,6 +22,8 @@ const mock = {
   limit: 43_200,
   /** Whether a change was made since the last save; the real backend compares running and startup. */
   dirty: false,
+  /** Whether a configuration is saved; mockFreshInstall() in the console makes it false until a save. */
+  saved: true,
   generation: 4,
   /** When the last change was made; the engine shows `pending` for a moment after it. */
   changedAt: 0,
@@ -171,6 +173,17 @@ const unchanged = () => ({ generation: mock.generation })
   changed()
 }
 
+;// A fresh install: nothing saved, no lists, and so nothing unsaved either until a change; the first save
+// creates the startup configuration. Run mockFreshInstall() in the browser console, then go to another
+// page (a reload would start the mock afresh).
+;(globalThis as { mockFreshInstall?: () => void }).mockFreshInstall = () => {
+  mock.acls = {}
+  mock.interfaces = {}
+  mock.generation = 0
+  mock.dirty = false
+  mock.saved = false
+}
+
 ;(globalThis as { mockSession?: (idle: number, limit: number) => void }).mockSession = (idle, limit) => {
   mock.idle = idle
   mock.limit = limit
@@ -244,10 +257,18 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     const more = records.filter((r) => r.id < before).length > limit
     return { records: page, next: more ? page[page.length - 1].id : null } satisfies EventPage<unknown>
   }],
-  ['GET', /^\/config$/, (): DeviceConfig => ({
-    generation: mock.generation,
-    config: { hostname: 'sw1', interfaces: mock.interfaces, acls: mock.acls, voidGate: {}, feed: {} },
-  })],
+  ['GET', /^\/config$/, (_, { query }): DeviceConfig => {
+    if (query?.what === 'startup') {
+      // the mock keeps no saved copy: the running one stands in for it, or the defaults with nothing saved
+      return mock.saved
+        ? { present: true, config: { hostname: 'sw1', interfaces: mock.interfaces, acls: mock.acls, voidGate: {}, feed: {} } }
+        : { present: false, config: { hostname: 'seawall', interfaces: {}, acls: {}, voidGate: {}, feed: {} } }
+    }
+    return {
+      generation: mock.generation,
+      config: { hostname: 'sw1', interfaces: mock.interfaces, acls: mock.acls, voidGate: {}, feed: {} },
+    }
+  }],
   ['POST', /^\/acl\/entry$/, (_, { body }) => {
     const b = body as { acl: unknown; ace: unknown; seq?: unknown }
     const acl = aclNumber(b.acl)
@@ -356,9 +377,10 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       ],
     }
   }],
-  ['GET', /^\/config\/pending$/, () => ({ dirty: mock.dirty })],
+  ['GET', /^\/config\/pending$/, (): ConfigPending => ({ dirty: mock.dirty, present: mock.saved })],
   ['POST', /^\/config\/save$/, () => {
     mock.dirty = false
+    mock.saved = true
     return {}
   }],
 ]

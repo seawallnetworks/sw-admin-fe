@@ -5,8 +5,8 @@ import { clearSession, getRole, getSession, getToken, setSession, type Session }
 import { ApiError } from './types'
 import { naiveTheme } from './theme'
 import type {
-  AclEngine, Alert, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, DashboardData, DeviceConfig, EventPage,
-  RequestOptions, Role,
+  AclEngine, Alert, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, ConfigPending, DashboardData, DeviceConfig,
+  EventPage, RequestOptions, Role,
 } from './types'
 
 export * from './types'
@@ -448,13 +448,17 @@ export const deleteInterface = (iface: string) => del<ChangeReply>('/interface',
 /** Whether the lists are enforced: mfwd's state and packet counters. */
 export const getAclEngine = (opts: GetOptions = {}) => get<AclEngine>('/acl-engine', undefined, opts)
 
-/** Asks whether there are unsaved changes. Admin only: for a `user` there is nothing to save. */
+/**
+ * Asks whether there are unsaved changes. Admin only: for a `user` there is nothing to save. Silent: it
+ * runs on every page change and after every change, only to update the header, so a failure keeps the
+ * last answer instead of showing an error each time; the page's own requests report what is wrong.
+ */
 export async function refreshPendingChanges() {
   if (getRole() !== 'admin') {
     unsavedChanges.value = false
     return
   }
-  unsavedChanges.value = (await get<{ dirty: boolean }>('/config/pending')).dirty
+  unsavedChanges.value = (await get<ConfigPending>('/config/pending', undefined, { silent: true })).dirty
 }
 export async function saveConfig() {
   await post<object>('/config/save')

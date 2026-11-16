@@ -12,6 +12,11 @@ export interface AclEntry {
 export interface DeviceConfig {
   /** Counts changes to the running configuration; only in the `running` reply. */
   generation?: number
+  /**
+   * Only in the `startup` reply: whether a configuration is saved. False on a fresh install, and `config`
+   * is then the defaults the device starts with.
+   */
+  present?: boolean
   config: {
     hostname: string
     /** By Linux interface name; `acls_in` are the lists applied to incoming traffic, sorted. */
@@ -21,6 +26,14 @@ export interface DeviceConfig {
     voidGate: object
     feed: object
   }
+}
+
+/** GET /config/pending. */
+export interface ConfigPending {
+  /** Whether a restart would lose a change: the running configuration differs from the startup one. */
+  dirty: boolean
+  /** Whether a configuration is saved at all; false on a fresh install, until the first save. */
+  present: boolean
 }
 
 /** Every change call's reply; deleting or adding an entry also gives its `seq`. */

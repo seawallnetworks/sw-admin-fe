@@ -45,7 +45,8 @@ src/
   events.ts        labels and text for the events: alerts, blocks, state changes
   help.ts          loads public/llms.txt and splits it into sections for the help drawer
   mock.ts          mock backend (loaded on demand, development only);
-                   mockSession(idle, limit) in the console shortens the session
+                   mockSession(idle, limit) in the console shortens the session,
+                   mockFreshInstall() makes it a fresh install, with nothing saved
   components/      HelpDrawer (the Help button and its panel), AlertBanner (open alerts, on every page)
   views/           Login / Dashboard / AccessLists / Logs / Placeholder
 ```
@@ -68,7 +69,7 @@ nginx gives `/llms.txt` to logged-in users only (see `conf/nginx.conf` in lua-re
 | POST | /api/acl/rules | add a rule |
 | PUT | /api/acl/rules/:id | update a rule (any subset of fields) |
 | DELETE | /api/acl/rules/:id | delete a rule |
-| GET | /api/config/pending | `{dirty}`: whether there are unsaved changes |
+| GET | /api/config/pending | `{dirty, present}`: whether there are unsaved changes, and whether a configuration is saved at all (`false` on a fresh install) |
 | POST | /api/config/save | save the configuration |
 
 The full contract is `docs/api.md` in the backend repo lua-resty-sw-admin.
