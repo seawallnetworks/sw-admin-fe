@@ -5,7 +5,7 @@ import { getToken } from './auth'
 import { ApiError } from './types'
 import type {
   AclEngine, AclEngineState, AclEntry, Alert, AuditRecord, BlockRecord, ChangeRecord, ConfigPending, DashboardData,
-  DeviceConfig, EventPage, RequestOptions,
+  DeviceConfig, EventPage, RequestOptions, Trends,
 } from './types'
 
 type MockHandler = (m: RegExpMatchArray, opts: RequestOptions) => unknown
@@ -61,13 +61,31 @@ const mock = {
   engineState: 'auto' as AclEngineState | 'auto',
   /** mfwd's flows: 'none' as when it started without sw_flowd's table. */
   flows: 'sw_flowd' as 'sw_flowd' | 'none',
+  /**
+   * The Dashboard's state: 'quiet' (nothing armed, no alerts), 'attack' (armed 4 minutes ago and dropping)
+   * or 'alert' (voidgate stopped a minute ago, an interface missing). mockDashboard('quiet') in the console.
+   */
+  scenario: 'attack' as Scenario,
 }
+
+type Scenario = 'quiet' | 'attack' | 'alert'
+
+/** The attack's start, and voidgate's stop, in the 'attack' and 'alert' scenarios: seconds before now. */
+const ATTACK_AGO = 240
+const STOPPED_AGO = 60
 
 const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max - min))
 
 // ---------- events, as sw_logd would have them: newest first, fixed for a page load ----------
 
 const loadedAt = Math.floor(Date.now() / 1000)
+const H = 3600
+const D = 86400
+
+/** Newest first, with ids that fall with the time, as sw_logd's paging needs. */
+function newestFirst<T extends { id: number }>(rows: T[], time: (r: T) => number): T[] {
+  return rows.sort((a, b) => time(b) - time(a)).map((r, i) => ({ ...r, id: rows.length - i }))
+}
 
 function mockAudit(): AuditRecord[] {
   const base = { detail: null, count: 0, truncated: false }
@@ -99,46 +117,82 @@ function mockAudit(): AuditRecord[] {
 
 function mockBlocks(): BlockRecord[] {
   const b = {
-    started_after_gap: false, ended: null, end_state: null, rate: null, origin: 'self', uid: null,
+    id: 0, started_after_gap: false, ended: null, end_state: null, rate: null, origin: 'self', uid: null,
     out_of_band: false, more: 0,
   }
-  return [
-    { ...b, id: 90, network: null, reason: 'policy', started: loadedAt - 30, more: 1250 },
-    ...Array.from({ length: 6 }, (_, i) => ({
-      ...b, id: 84 + i, network: `198.18.${i}.0/24`, reason: 'aggregate', started: loadedAt - 40 - i * 3,
+  const ended = (started: number, secs: number, end_state: string) => ({ started, ended: started + secs, end_state })
+  const rows: BlockRecord[] = [
+    // in force in every scenario: one by hand, one ban
+    { ...b, network: '203.0.113.66/32', reason: 'manual', started: loadedAt - 3 * H, origin: 'socket', uid: 0,
+      out_of_band: true },
+    { ...b, network: '192.0.2.81/32', reason: 'timed', started: loadedAt - 600, origin: 'ban', uid: 33 },
+    // bans of the last day, ended
+    ...[1200, 5 * H, 20 * H, 30 * H].map((ago, i) => ({
+      ...b, network: `192.0.2.${44 + i}/32`, reason: 'timed', ...ended(loadedAt - ago, 600, 'expired'),
+      origin: 'ban', uid: 33,
     })),
-    { ...b, id: 83, network: '203.0.113.66/32', reason: 'manual', started: loadedAt - 900, origin: 'socket',
-      uid: 0, out_of_band: true },
-    { ...b, id: 82, network: '192.0.2.44/32', reason: 'timed', started: loadedAt - 1200, ended: loadedAt - 600,
-      end_state: 'expired', origin: 'ban', uid: 33 },
-    { ...b, id: 81, network: '100.64.3.0/24', reason: 'aggregate', started: loadedAt - 7200,
-      started_after_gap: true, ended: loadedAt - 5000, end_state: 'unknown' },
+    // past attacks' blocks, lifted by the disarm or the restart
+    ...[26 * H, 3 * D, 5 * D].flatMap((ago, k) =>
+      Array.from({ length: 4 }, (_, i) => ({
+        ...b, network: `198.18.${k * 10 + i}.0/24`, reason: 'aggregate', ...ended(loadedAt - ago + 30, 1800, 'disarm'),
+      })),
+    ),
+    { ...b, network: '100.64.3.0/24', reason: 'aggregate', started: loadedAt - 2 * H, started_after_gap: true,
+      ended: loadedAt - 2 * H + 1000, end_state: 'unknown' },
+    { ...b, network: '198.51.100.9/32', reason: 'manual', ...ended(loadedAt - 4 * D, 2 * H, 'unblock'),
+      origin: 'socket', uid: 0 },
   ]
+  if (mock.scenario === 'attack') {
+    rows.push(
+      { ...b, network: null, reason: 'policy', started: loadedAt - ATTACK_AGO + 30, more: 1250 },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        ...b, network: `198.18.${100 + i}.0/24`, reason: 'aggregate', started: loadedAt - ATTACK_AGO + 10 + i * 3,
+      })),
+    )
+  }
+  return newestFirst(rows, (r) => r.started)
 }
 
 function mockChanges(): ChangeRecord[] {
-  const c = { origin: 'self', uid: null, user: null, cause: null, generation: null, out_of_band: false }
-  return [
-    { ...c, id: 12, time: loadedAt - 50, severity: 'info', source: 'voidgate', op: 'arm', cause: 'wake-threshold' },
-    { ...c, id: 13, time: loadedAt - 20, severity: 'info', source: 'voidgate', op: 'arm', origin: 'ban', uid: 33,
-      user: 'www-data', cause: 'ban' },
-    { ...c, id: 11, time: loadedAt - 330, severity: 'warning', source: 'voidgate', op: 'gap', cause: 'restart' },
-    { ...c, id: 10, time: loadedAt - 900, severity: 'warning', source: 'voidgate', op: 'disarm', origin: 'socket',
-      uid: 0, user: 'root', cause: 'command', out_of_band: true },
-    { ...c, id: 9, time: loadedAt - 3600, severity: 'info', source: 'mfwd', op: 'apply', origin: 'apply', uid: 998,
-      user: 'sw_configd', generation: 7 },
-    { ...c, id: 8, time: loadedAt - 86000, severity: 'info', source: 'mfwd', op: 'apply', origin: 'restart', uid: 0,
-      user: 'root', generation: 1 },
+  const c = { id: 0, severity: 'info' as const, source: 'voidgate', origin: 'self', uid: null, user: null,
+    cause: null, generation: null, out_of_band: false }
+  const arm = (ago: number, cause = 'wake-threshold') =>
+    cause === 'ban'
+      ? { ...c, time: loadedAt - ago, op: 'arm', cause, origin: 'ban', uid: 33, user: 'www-data' }
+      : { ...c, time: loadedAt - ago, op: 'arm', cause }
+  const disarm = (ago: number) => ({ ...c, time: loadedAt - ago, op: 'disarm', cause: 'attack-cleared' })
+  const rows: ChangeRecord[] = [
+    // the gate was armed before the 7 days: the first change in them is a disarm
+    disarm(7 * D - 2 * H),
+    arm(5 * D), disarm(5 * D - 25 * 60),
+    // a restart ends an attack: no disarm logged
+    arm(3 * D), arm(3 * D - 600, 'ban'),
+    { ...c, time: loadedAt - 3 * D + 2 * H, severity: 'warning', op: 'gap', cause: 'restart' },
+    arm(26 * H), disarm(26 * H - 40 * 60),
+    { ...c, time: loadedAt - 900, severity: 'warning', op: 'reload', origin: 'socket', uid: 0, user: 'root',
+      cause: 'command', out_of_band: true },
+    { ...c, time: loadedAt - 3600, source: 'mfwd', op: 'apply', origin: 'apply', uid: 998, user: 'sw_configd',
+      generation: 7 },
+    { ...c, time: loadedAt - 86000, source: 'mfwd', op: 'apply', origin: 'restart', uid: 0, user: 'root',
+      generation: 1 },
   ]
+  if (mock.scenario === 'attack') rows.push(arm(ATTACK_AGO), arm(ATTACK_AGO - 60, 'ban'))
+  return newestFirst(rows, (r) => r.time)
 }
 
 function mockAlerts(): Alert[] {
   const alerts: Alert[] = [
-    { id: 3, condition: 'mfwd_missing_interfaces', severity: 'warning', raised: loadedAt - 7200, cleared: null,
-      message: 'mfwd: bound interfaces not present, so not filtered: eth9' },
     { id: 2, condition: 'voidgate_unreachable', severity: 'warning', raised: loadedAt - 400,
       cleared: loadedAt - 330, message: "voidgate's read-only socket can't be read: connection refused" },
   ]
+  if (mock.scenario === 'alert') {
+    alerts.unshift(
+      { id: 5, condition: 'voidgate_unreachable', severity: 'warning', raised: loadedAt - STOPPED_AGO, cleared: null,
+        message: "voidgate's read-only socket can't be read: connection refused" },
+      { id: 3, condition: 'mfwd_missing_interfaces', severity: 'warning', raised: loadedAt - 7200, cleared: null,
+        message: 'mfwd: bound interfaces not present, so not filtered: eth9' },
+    )
+  }
   if (mock.flows === 'none') {
     alerts.unshift({ id: 4, condition: 'mfwd_no_flow_table', severity: 'critical', raised: loadedAt, cleared: null,
       message: 'mfwd: no sw_flowd flow table; replies to the host\'s own flows fall back to "established"' })
@@ -199,6 +253,42 @@ const secsLeft = (now: number) =>
 ;(globalThis as { mockFlows?: (s: string) => void }).mockFlows = (s) => {
   mock.flows = s === 'none' ? 'none' : 'sw_flowd'
 }
+;(globalThis as { mockDashboard?: (s: Scenario) => void }).mockDashboard = (s) => {
+  mock.scenario = s
+}
+
+/** Packets a second in at `time` (epoch seconds), for the scenario: an attack's flood, or nothing while stopped. */
+function inboundAt(time: number): { inbound: number | null; dropped: number | null } {
+  // since the page loaded, as the changes and alerts have it
+  const ago = loadedAt - time
+  if (mock.scenario === 'alert' && ago < STOPPED_AGO) return { inbound: null, dropped: null }
+  const normal = Math.round(120000 + 40000 * Math.sin(time / 60) + rand(0, 15000))
+  if (mock.scenario === 'attack' && ago < ATTACK_AGO) {
+    const flood = 900000 + rand(0, 200000)
+    return { inbound: normal + flood, dropped: flood - rand(0, 20000) }
+  }
+  return { inbound: normal, dropped: 0 }
+}
+
+/** voidgate's trends: 10-second buckets up to 48 hours, 15-minute ones beyond, at most 600. */
+function mockTrends(since: number, until: number): Trends {
+  const width = until - since > 2 * D ? 900 : 10
+  const first = width === 10 ? Math.max(Math.floor(since / 10) * 10, until - 6000) : Math.floor(since / width) * width
+  const coverage: Trends['coverage'] = []
+  const series: Trends['series'] = []
+  for (let time = first; time < until; time += width) {
+    const now = Math.min(time + width / 2, until)
+    const { inbound } = inboundAt(now)
+    if (inbound === null) continue
+    const secs = Math.min(width, until - time)
+    coverage.push({ time, source: 'voidgate', secs, ratio: 1, covered: true })
+    // a past attack's peak, on the days the changes armed the gate
+    const attack = [26 * H, 3 * D, 5 * D].some((ago) => Math.abs(loadedAt - ago - time) < 1800)
+    const peak = attack ? 2_400_000 + rand(0, 300000) : Math.round(inbound * 1.2)
+    series.push({ time, source: 'voidgate', series: 'rx', pkts: inbound * secs, bytes: inbound * secs * 680, peak_pps: peak })
+  }
+  return { tier: width === 10 ? '10s' : '15m', width, threshold: 0.5, since, until, coverage, series }
+}
 
 const mockRoutes: [string, RegExp, MockHandler][] = [
   ['POST', /^\/session$/, (_, { body }) => {
@@ -217,9 +307,9 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     const now = Math.floor(Date.now() / 10000) * 10
     const traffic = Array.from({ length: 90 }, (_, i) => {
       const time = now - (89 - i) * 10
-      if (i >= 55 && i < 61) return { time, inbound_pps: null, dropped_pps: null }
-      const inbound_pps = Math.round(120000 + 40000 * Math.sin(time / 60) + rand(0, 15000))
-      return { time, inbound_pps, dropped_pps: Math.round(inbound_pps * (0.05 + Math.random() * 0.1)) }
+      if (i >= 25 && i < 31) return { time, inbound_pps: null, dropped_pps: null }
+      const { inbound, dropped } = inboundAt(time)
+      return { time, inbound_pps: inbound, dropped_pps: dropped }
     })
     const last = traffic[traffic.length - 1]
     return {
@@ -245,7 +335,15 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
       alerts: () => mockAlerts() as unknown as Row[],
     }
     if (query?.since === undefined) throw new ApiError(400, 'invalid', 'since: required, Unix seconds')
-    let records = lists[m[1]]()
+    // in the range: an event by its time; a block or an alert open at any time in it
+    const since = Number(query.since)
+    const until = Number(query.until ?? Date.now() / 1000)
+    const inRange = (r: Row) => {
+      const start = Number(r.time ?? r.started ?? r.raised)
+      const end = (r.ended ?? r.cleared ?? (r.time === undefined ? null : r.time)) as number | null | undefined
+      return start <= until && (end === null || end === undefined || end >= since)
+    }
+    let records = lists[m[1]]().filter(inRange)
     const sev = { info: 0, warning: 1, critical: 2 } as Record<string, number>
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v === undefined || v === '' || ['since', 'until', 'limit', 'before'].includes(k)) continue
@@ -256,6 +354,12 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
     const page = records.filter((r) => r.id < before).slice(0, limit)
     const more = records.filter((r) => r.id < before).length > limit
     return { records: page, next: more ? page[page.length - 1].id : null } satisfies EventPage<unknown>
+  }],
+  ['GET', /^\/events\/trends$/, (_, { query }): Trends => {
+    if (query?.since === undefined) throw new ApiError(400, 'invalid', 'since: required, Unix seconds')
+    const t = mockTrends(Number(query.since), Math.floor(Number(query.until ?? Date.now() / 1000)))
+    if (query.source && query.source !== 'voidgate') return { ...t, coverage: [], series: [] }
+    return t
   }],
   ['GET', /^\/config$/, (_, { query }): DeviceConfig => {
     if (query?.what === 'startup') {

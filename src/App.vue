@@ -118,7 +118,8 @@ function onUserSelect(key: string) {
               </NSpace>
             </NLayoutHeader>
             <NLayoutContent content-style="padding: 20px;" class="content">
-              <AlertBanner />
+              <!-- the Dashboard lists every open alert itself -->
+              <AlertBanner v-if="route.path !== '/dashboard'" />
               <RouterView />
             </NLayoutContent>
           </NLayout>

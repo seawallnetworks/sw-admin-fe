@@ -185,6 +185,18 @@ export interface EventPage<T> {
   next: number | null
 }
 
+/** GET /events/trends: traffic counters in buckets of `width` seconds. */
+export interface Trends {
+  tier: string
+  width: number
+  threshold: number
+  since: number
+  until: number
+  /** Per bucket and source, the seconds measured; a bucket not `covered`, or not listed, is a gap. */
+  coverage: { time: number; source: string; secs: number; ratio: number; covered: boolean }[]
+  series: { time: number; source: string; series: string; pkts: number; bytes: number; peak_pps: number }[]
+}
+
 export interface DashboardData {
   /** voidgate's latest 10-second interval; null when there is none recent: show "-". */
   inbound_pps: number | null

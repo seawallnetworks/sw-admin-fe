@@ -6,7 +6,7 @@ import { ApiError } from './types'
 import { naiveTheme } from './theme'
 import type {
   AclEngine, Alert, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, ConfigPending, DashboardData, DeviceConfig,
-  EventPage, RequestOptions, Role,
+  EventPage, RequestOptions, Role, Trends,
 } from './types'
 
 export * from './types'
@@ -353,7 +353,7 @@ export function ensureSession(): Promise<boolean> {
 }
 
 /** `background` for a poll; see usePoller.ts. */
-export const fetchDashboard = (background?: boolean) => get<DashboardData>('/dashboard', undefined, { background })
+export const fetchDashboard = (opts: GetOptions = {}) => get<DashboardData>('/dashboard', undefined, opts)
 
 // ---------- events, from sw_logd ----------
 
@@ -382,8 +382,30 @@ export interface EventQuery {
 }
 
 /** One page of an event list, newest first. */
-export const fetchEvents = <K extends keyof EventLists>(list: K, query: EventQuery) =>
-  get<EventPage<EventLists[K]>>(`/events/${list}`, query)
+export const fetchEvents = <K extends keyof EventLists>(list: K, query: EventQuery, opts: GetOptions = {}) =>
+  get<EventPage<EventLists[K]>>(`/events/${list}`, query, opts)
+
+/** Every page of an event list, newest first, up to `maxPages` pages of 500. */
+export async function fetchAllEvents<K extends keyof EventLists>(
+  list: K,
+  query: EventQuery,
+  opts: GetOptions = {},
+  maxPages = 10,
+): Promise<EventLists[K][]> {
+  const out: EventLists[K][] = []
+  let before: number | undefined
+  for (let i = 0; i < maxPages; i++) {
+    const page = await fetchEvents(list, { ...query, limit: 500, before }, opts)
+    out.push(...page.records)
+    if (page.next === null) break
+    before = page.next
+  }
+  return out
+}
+
+/** Traffic counters in buckets; `source` 'voidgate' or 'mfwd'. */
+export const fetchTrends = (query: { since: number; until?: number; source?: string }, opts: GetOptions = {}) =>
+  get<Trends>('/events/trends', query, opts)
 
 // ---------- the diagnostic bundle (admin only) ----------
 
@@ -431,7 +453,7 @@ export async function downloadDiag(): Promise<void> {
 // ---------- access lists and interfaces (admin only) ----------
 
 /** The configuration in effect; read it again after each change, as the device rewrites entries. */
-export const getConfig = () => get<DeviceConfig>('/config', { what: 'running' })
+export const getConfig = (opts: GetOptions = {}) => get<DeviceConfig>('/config', { what: 'running' }, opts)
 
 /** Without `seq`, the entry goes after the last one (its seq + 10). Creates the list if it's missing. */
 export const addAclEntry = (acl: number, ace: string, seq?: number) =>
@@ -452,13 +474,14 @@ export const getAclEngine = (opts: GetOptions = {}) => get<AclEngine>('/acl-engi
  * Asks whether there are unsaved changes. Admin only: for a `user` there is nothing to save. Silent: it
  * runs on every page change and after every change, only to update the header, so a failure keeps the
  * last answer instead of showing an error each time; the page's own requests report what is wrong.
+ * `background` for a poll.
  */
-export async function refreshPendingChanges() {
+export async function refreshPendingChanges(background = false) {
   if (getRole() !== 'admin') {
     unsavedChanges.value = false
     return
   }
-  unsavedChanges.value = (await get<ConfigPending>('/config/pending', undefined, { silent: true })).dirty
+  unsavedChanges.value = (await get<ConfigPending>('/config/pending', undefined, { silent: true, background })).dirty
 }
 export async function saveConfig() {
   await post<object>('/config/save')

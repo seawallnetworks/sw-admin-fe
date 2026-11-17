@@ -25,26 +25,28 @@
 
 - Menu on the left: Dashboard, Access Lists, DDoS Protection, HTTP Flood, CC Protection, Brute-Force Protection, Logs. The arrow on the menu's edge collapses or expands it.
 - Header: the current page's name on the left; on the right the "Unsaved changes" tag, the "Save Config" button (administrators only), the theme button, the "Help" button and the user name menu.
-- Alert banner: when something on the device needs attention, a colored box at the top of every page names it (see Alerts).
+- Alert banner: when something on the device needs attention, a colored box at the top of every page but the Dashboard names it (see Alerts). The Dashboard lists every open alert instead.
 - Theme: the round icon button in the header, left of "Help" (a half-filled circle, a sun or a moon, for the current choice). Click it and choose System (the default: light or dark as the computer is set), Light or Dark. The choice is kept in this browser only.
 - "Help" opens a panel with the help for the current page. "Full manual" at the bottom of the panel shows this whole manual, and "This page" goes back.
 
 ## Roles
 
 - Administrator (admin): can use everything, and sees the "Save Config" button.
-- User (user): doesn't see "Save Config" or the "Unsaved changes" tag, and the Access Lists page says "Administrators only": only administrators can view or change the access lists.
+- User (user): doesn't see "Save Config" or the "Unsaved changes" tag, and the Access Lists page says "Administrators only": only administrators can view or change the access lists. On the Dashboard, the Access Lists card says "Admins only" and "This device" isn't shown.
 
 ## Dashboard
 
-Shows the device's live state. It refreshes every 10 seconds (paused while the browser tab is in the background, and refreshed at once when you come back to it).
+An overview: whether everything is fine, and where to look. The details are on each module's page. Alerts, traffic, the access lists and recent activity refresh every 10 seconds, the "Last 7 days" figures every minute (paused while the browser tab is in the background, and refreshed at once when you come back to it). A "—" in place of a figure means the console can't read it now; it doesn't mean zero.
 
-- Inbound (pps): packets per second reaching the device's DDoS gate, over the last 10 seconds.
-- Dropped (pps): packets per second the DDoS gate dropped, over the last 10 seconds.
-- Active ACL Entries: how many access list entries are in effect: the entries of the lists that interfaces apply.
-- A "-" in place of a number means the console has no recent figure: the DDoS gate or the event store isn't running. It doesn't mean zero.
-- Traffic, last 15 minutes: inbound and dropped traffic, a point every 10 seconds. A break in the lines is a time with no data (the DDoS gate was restarting, for example), not a drop to zero. Hover over the chart to see the values at a moment; click a legend entry to hide or show that line.
-- Latest Blocks: the networks the DDoS gate blocked in the last 24 hours, newest first, at most 10: when, the network, the reason, and whether the block is still in force. "All blocks" opens them on the Logs page.
-- Open Alerts: the conditions that need attention now. "History" opens past alerts on the Logs page.
+- Alerts, at the top: one line per open alert, most severe first, with what it means, since when, and a link to the page that fixes it (DDoS Protection, Access Lists or Logs). Nothing is shown when there is no alert. On the Dashboard this list replaces the alert banner of the other pages.
+- Three cards, one per module; click a card to open its page.
+  - DDoS Protection: "Watching" (green): nothing is going on. "Armed": the DDoS gate armed itself and is ready to drop. "Under attack" (orange, with a bar on its left): armed and dropping traffic now. "Not running" (red): the console can't reach the DDoS gate. ", degraded" is added when the gate runs in a slower mode or without its connection table. Below: the networks blocked now, and when the last attack started, or how fast traffic is dropped during an attack.
+  - Access Lists: whether the lists are enforced, in the words of the Access Lists page ("Enforced", "Applying", "Engine down", ...), with ", 1 problem" (orange) when a firewall alert is open; the interfaces it filters; and "Dropped by lists", the packets a second the lists dropped since the previous refresh ("—" until there have been two). Users who aren't administrators see "Admins only".
+  - HTTP Flood · CC · Brute force: "Not set up" yet. These come from the web gateway banning clients through the DDoS gate; "Bans, last 24 h" counts those bans.
+- Incoming traffic, last 15 minutes: the packets a second reaching the device, a point every 10 seconds, with the current rate in packets and megabits a second in the heading. A break in the line is a time with no data (the DDoS gate was restarting, for example), not a drop to zero. A dashed line "Armed" marks each time the DDoS gate armed itself. "Details on DDoS Protection" opens that page.
+- Last 7 days: how many attacks (from the gate arming until it disarmed, or until it restarted), the longest, the highest rate of incoming traffic, and the networks blocked ("N by hand": blocked by a person). The bars show the minutes under attack on each day, in your computer's time zone.
+- Recent activity: the latest six events, logins, changes and the DDoS gate's actions, each with a tag (DDoS, ACL, Config, Login). "Logs" opens them all.
+- This device (administrators only): the device's hostname, and a warning when the configuration changed since the last Save Config, so a restart would lose it.
 
 ## Access Lists
 
@@ -196,7 +198,7 @@ Administrators see a "Diagnostic Bundle" card at the bottom of the Logs page. "D
 
 ## Alerts
 
-An alert is a condition on the device that needs attention, open until it is fixed. The most severe open one is shown at the top of every page, with "and N more open alerts" when there are others. Critical alerts mean the protection isn't working as it should.
+An alert is a condition on the device that needs attention, open until it is fixed. The most severe open one is shown at the top of every page, with "and N more open alerts" when there are others; the Dashboard lists them all, each with a link to the page that fixes it. Critical alerts mean the protection isn't working as it should.
 
 - DDoS gate unreachable, Firewall engine unreachable: the console can't read that component; it may have stopped. Ask the administrator to check it on the device.
 - DDoS gate: no flow table, Firewall: no flow table (critical): the component started without the table of the device's own connections, so replies to the device's own traffic (DNS, updates, pings) may be dropped. The message says what to do, usually start sw_flowd and then restart the component.
