@@ -146,7 +146,7 @@ export interface BlockRecord {
   started_after_gap: boolean
   /** null: in force. */
   ended: number | null
-  /** 'undrop', 'expired', 'reload', 'disarm', 'unknown'. */
+  /** 'unblock', 'expired', 'reload', 'disarm', 'unknown'. */
   end_state: string | null
   rate: number | null
   /**

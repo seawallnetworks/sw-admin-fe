@@ -54,7 +54,7 @@ export function blockNetwork(b: Pick<BlockRecord, 'network' | 'more'>): string {
 }
 
 const END_STATES: Record<string, string> = {
-  undrop: 'Lifted',
+  unblock: 'Lifted',
   expired: 'Expired',
   reload: 'Lifted by reload',
   disarm: 'Disarmed',

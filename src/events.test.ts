@@ -38,6 +38,7 @@ describe('blocks', () => {
   it('in force, or how it ended', () => {
     expect(blockState({ ended: null, end_state: null })).toBe('In force')
     expect(blockState({ ended: 5, end_state: 'expired' })).toBe('Expired')
+    expect(blockState({ ended: 5, end_state: 'unblock' })).toBe('Lifted')
     expect(blockState({ ended: 5, end_state: 'unknown' })).toBe('Ended (time unknown)')
     expect(blockState({ ended: 5, end_state: 'new' })).toBe('new')
   })
