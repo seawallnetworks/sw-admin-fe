@@ -1,6 +1,6 @@
 // The Dashboard's overview: whether each module is fine, and where to look. Derived from the event lists,
 // the alerts and the engine's state; kept free of Vue, so it can be tested on its own.
-import type { AclEngine, Alert, AuditRecord, BlockRecord, ChangeRecord, Trends } from './types'
+import type { AclEngine, Alert, AttackRecord, AuditRecord, BlockRecord, ChangeRecord, OpenAttack, Trends } from './types'
 import type { IfaceStatus } from './aclPage'
 import { changeText, changeWho, conditionLabel } from './events'
 
@@ -93,11 +93,6 @@ export function armedSince(changes: ChangeRecord[]): number | null {
   return since
 }
 
-/** The latest arm, epoch seconds; null for none. */
-export function lastArm(changes: ChangeRecord[]): number | null {
-  return changes.filter(isArm).reduce<number | null>((t, c) => (t === null || c.time > t ? c.time : t), null)
-}
-
 export type DdosState = 'down' | 'attack' | 'armed' | 'watching'
 
 export interface DdosStatus {
@@ -115,14 +110,16 @@ const DDOS: Record<DdosState, { label: string; tone: Tone }> = {
 }
 
 /**
- * The DDoS gate's state from the open alerts, its changes (any order) and the dropped rate now.
- * TODO(backend): replace this derivation with voidgate's own status once the API has it (proposal 0016).
+ * The DDoS gate's state from the open alerts, its changes (any order) and the attack open now, which
+ * voidgate reports (proposal 0017).
+ * TODO(backend): "armed" is still derived from the changes; voidgate's own status is proposal 0016's.
  */
-export function ddosStatus(alerts: Alert[], changes: ChangeRecord[], droppedPps: number | null): DdosStatus {
+export function ddosStatus(alerts: Alert[], changes: ChangeRecord[], attack: OpenAttack | null): DdosStatus {
   const has = (c: string) => alerts.some((a) => a.condition === c)
   let state: DdosState
   if (has('voidgate_unreachable')) state = 'down'
-  else if (armedSince(changes) !== null) state = (droppedPps ?? 0) > 0 ? 'attack' : 'armed'
+  else if (attack) state = 'attack'
+  else if (armedSince(changes) !== null) state = 'armed'
   else state = 'watching'
   const degraded = state !== 'down' && (has('voidgate_degraded') || has('voidgate_no_flow_table'))
   const { label, tone } = DDOS[state]
@@ -137,32 +134,43 @@ export function ddosStatus(alerts: Alert[], changes: ChangeRecord[], droppedPps:
 export interface Attack {
   start: number
   end: number
-  /** Still armed: `end` is now. */
+  /** Still open: `end` is now. */
   ongoing: boolean
+  /** Its end was missed (a gap, a restart): `end` is a lower bound. */
+  atLeast: boolean
 }
 
-/**
- * The attacks in [since, now]: each arm to the disarm (or restart) after it. A further arm while armed
- * is the same attack. When the first change is an end, the attack began before the range: from `since`.
- */
-export function attacks(changes: ChangeRecord[], since: number, now: number): Attack[] {
-  const out: Attack[] = []
-  let open: number | null = null
-  let first = true
-  for (const c of chronological(changes)) {
-    if (c.time < since || c.time > now) continue
-    if (isArm(c)) {
-      open ??= c.time
-    } else if (open !== null) {
-      out.push({ start: open, end: c.time, ongoing: false })
-      open = null
-    } else if (first && c.op === 'disarm') {
-      out.push({ start: since, end: c.time, ongoing: false })
-    }
-    first = false
-  }
-  if (open !== null) out.push({ start: open, end: now, ongoing: true })
-  return out
+/** voidgate's attacks (any order), oldest first; an open one ends now. */
+export function attackSpans(records: AttackRecord[], now: number): Attack[] {
+  return records
+    .map((r) => ({
+      start: r.start,
+      end: r.end ?? Math.max(now, r.start),
+      ongoing: r.end === null,
+      atLeast: r.how === 'gap' || r.how === 'restart',
+    }))
+    .sort((a, b) => a.start - b.start)
+}
+
+/** The longest attack's seconds, and whether that is a lower bound; null for none. */
+export function longestAttack(list: Attack[]): { secs: number; atLeast: boolean } | null {
+  return list.reduce<{ secs: number; atLeast: boolean } | null>((m, a) => {
+    const secs = a.end - a.start
+    return m === null || secs > m.secs ? { secs, atLeast: a.atLeast } : m
+  }, null)
+}
+
+/** The highest single tick of any of the attacks, packets a second; null for none. */
+export function attackPeak(records: AttackRecord[]): number | null {
+  return records.reduce<number | null>(
+    (m, r) => (r.tick_peak_pps !== null && (m === null || r.tick_peak_pps > m) ? r.tick_peak_pps : m),
+    null,
+  )
+}
+
+/** When the last attack ended; null for none, or one still open. */
+export function lastAttackEnd(records: AttackRecord[]): number | null {
+  return records.reduce<number | null>((t, r) => (r.end !== null && (t === null || r.end > t) ? r.end : t), null)
 }
 
 export interface DayBar {

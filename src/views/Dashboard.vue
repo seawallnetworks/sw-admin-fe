@@ -18,13 +18,14 @@ import ModuleCard from '../components/ModuleCard.vue'
 import {
   fetchAllEvents, fetchDashboard, fetchEvents, fetchOpenAlerts, fetchTrends, getAclEngine, getConfig, getRole,
   refreshPendingChanges, unsavedChanges,
-  type AclEngine, type Alert, type BlockRecord, type ChangeRecord, type DashboardData,
+  type AclEngine, type Alert, type AttackRecord, type BlockRecord, type ChangeRecord, type DashboardData,
 } from '../api'
 import { STATUS_LABEL } from '../aclPage'
 import { fmtDateTime, fmtTime, severityLabel, severityType } from '../events'
 import {
-  aclStatus, alertText, attacks, countNetworks, ddosStatus, dropRate, fmtAgo, fmtDuration, fmtMbps, fmtRate,
-  lastArm, latestMbps, minutesPerDay, peakPps, recentActivity, sortAlerts, type Activity, type ActivityTag,
+  aclStatus, alertText, attackPeak, attackSpans, countNetworks, ddosStatus, dropRate, fmtAgo, fmtDuration,
+  fmtMbps, fmtRate, lastAttackEnd, latestMbps, longestAttack, minutesPerDay, recentActivity, sortAlerts,
+  type Activity, type ActivityTag,
 } from '../overview'
 import { isDark } from '../theme'
 import { usePoller } from '../usePoller'
@@ -53,6 +54,8 @@ const alerts = ref<Alert[] | null>(null)
 const engine = ref<AclEngine | null>(null)
 /** voidgate's arms, disarms and restarts of the last 7 days, the latest 100. */
 const gateChanges = ref<ChangeRecord[] | null>(null)
+/** The latest attack of the last 7 days, open or ended; null when unknown, [] for none. */
+const latestAttacks = ref<AttackRecord[] | null>(null)
 const activity = ref<Activity[] | null>(null)
 const blockedNow = ref<number | null>(null)
 const mbps = ref<number | null>(null)
@@ -69,7 +72,7 @@ usePoller(async (background) => {
   const t = nowSecs()
   const week = { since: t - WEEK }
   try {
-    const [d, al, eng, gate, mfwd, audit, inForce, tr] = await Promise.allSettled([
+    const [d, al, eng, gate, mfwd, audit, inForce, tr, att] = await Promise.allSettled([
       fetchDashboard(loud),
       fetchOpenAlerts(background),
       isAdmin ? getAclEngine(quiet) : Promise.resolve(null),
@@ -79,12 +82,14 @@ usePoller(async (background) => {
       // blocks in force at any time in the last 10 s: the ones still in force have no end
       fetchAllEvents('blocks', { since: t - 10 }, quiet, 5),
       fetchTrends({ since: t - 60, source: 'voidgate' }, quiet),
+      fetchEvents('attacks', { ...week, limit: 1 }, quiet),
     ])
     now.value = t
     dash.value = settled(d)
     alerts.value = settled(al)?.records ?? null
     engine.value = settled(eng)
     gateChanges.value = settled(gate)?.records ?? null
+    latestAttacks.value = settled(att)?.records ?? null
     const blocks = settled(inForce)
     blockedNow.value = blocks ? countNetworks(blocks.filter((b) => b.ended === null)) : null
     const trends = settled(tr)
@@ -108,9 +113,9 @@ usePoller(async (background) => {
 interface Week {
   since: number
   now: number
-  changes: ChangeRecord[]
+  /** voidgate's attacks open at any time in the 7 days (proposal 0017). */
+  attacks: AttackRecord[]
   blocks: BlockRecord[] | null
-  peak: number | null
 }
 const week = ref<Week | null>(null)
 const hostname = ref<string | null>(null)
@@ -119,18 +124,14 @@ usePoller(async (background) => {
   const quiet = { background, silent: true }
   const t = nowSecs()
   const since = t - WEEK
-  const [ch, bl, tr, cfg] = await Promise.allSettled([
-    fetchAllEvents('changes', { since, source: 'voidgate' }, quiet),
+  const [at, bl, cfg] = await Promise.allSettled([
+    fetchAllEvents('attacks', { since }, quiet),
     fetchAllEvents('blocks', { since }, quiet),
-    fetchTrends({ since, source: 'voidgate' }, quiet),
     isAdmin ? getConfig(quiet) : Promise.resolve(null),
     isAdmin ? refreshPendingChanges(true) : Promise.resolve(),
   ])
-  const changes = settled(ch)
-  const trends = settled(tr)
-  week.value = changes
-    ? { since, now: t, changes, blocks: settled(bl), peak: trends ? peakPps(trends) : null }
-    : null
+  const list = settled(at)
+  week.value = list ? { since, now: t, attacks: list, blocks: settled(bl) } : null
   hostname.value = settled(cfg)?.config.hostname ?? null
 }, WEEK_POLL_MS)
 
@@ -145,14 +146,23 @@ function fmtSince(t: number) {
 
 // ---------- 2. modules ----------
 
-const ddos = computed(() => ddosStatus(alerts.value ?? [], gateChanges.value ?? [], dash.value?.dropped_pps ?? null))
+const ddos = computed(() => ddosStatus(alerts.value ?? [], gateChanges.value ?? [], dash.value?.attack ?? null))
 const ddosKnown = computed(() => alerts.value !== null || gateChanges.value !== null)
+
+/** "Under attack since 21:38" while one is open (proposal 0017). */
+const ddosLabel = computed(() => {
+  const a = dash.value?.attack
+  if (ddos.value.state !== 'attack' || !a) return ddos.value.label
+  return ddos.value.label.replace('Under attack', `Under attack since ${fmtSince(a.since)}`)
+})
 
 const ddosStats = computed(() => {
   const blocked = { label: 'Blocked now', value: blockedNow.value === null ? '—' : networks(blockedNow.value) }
-  if (ddos.value.state === 'attack') return [blocked, { label: 'Dropping', value: fmtRate(dash.value?.dropped_pps) }]
-  const arm = gateChanges.value ? lastArm(gateChanges.value) : null
-  const last = gateChanges.value === null ? '—' : arm === null ? 'None in 7 days' : fmtAgo(arm, now.value)
+  const a = dash.value?.attack
+  // a single tick's peak, voidgate's: higher than the chart's 10-second rates
+  if (ddos.value.state === 'attack' && a) return [blocked, { label: 'Peak, one tick', value: fmtRate(a.tick_peak_pps) }]
+  const end = latestAttacks.value ? lastAttackEnd(latestAttacks.value) : null
+  const last = latestAttacks.value === null ? '—' : end === null ? 'None in 7 days' : fmtAgo(end, now.value)
   return [blocked, { label: 'Last attack', value: last }]
 })
 
@@ -249,13 +259,14 @@ const noTraffic = computed(() => dash.value !== null && dash.value.traffic.every
 const weekStats = computed(() => {
   const w = week.value
   if (!w) return null
-  const list = attacks(w.changes, w.since, w.now)
-  const longest = list.reduce((m, a) => Math.max(m, a.end - a.start), 0)
+  const list = attackSpans(w.attacks, w.now)
+  const longest = longestAttack(list)
   const started = w.blocks?.filter((b) => b.started >= w.since) ?? null
   return {
     count: list.length,
-    longest: list.length ? fmtDuration(longest) : '—',
-    peak: fmtRate(w.peak),
+    // a gap or a restart hid its end: what was seen of it
+    longest: longest ? `${longest.atLeast ? 'At least ' : ''}${fmtDuration(longest.secs)}` : '—',
+    peak: fmtRate(attackPeak(w.attacks)),
     cut: started ? countNetworks(started) : null,
     byHand: started ? countNetworks(started.filter((b) => b.reason === 'manual')) : null,
     bars: minutesPerDay(list, w.now),
@@ -310,7 +321,7 @@ const TAG_TYPE: Record<ActivityTag, 'warning' | 'info' | 'default' | 'success'> 
       <ModuleCard
         title="DDoS Protection"
         to="/ddos"
-        :status="ddosKnown ? ddos.label : 'Checking…'"
+        :status="ddosKnown ? ddosLabel : 'Checking…'"
         :tone="ddosKnown ? ddos.tone : 'default'"
         :bar="ddos.state === 'attack'"
         :stats="ddosStats"
@@ -379,7 +390,7 @@ const TAG_TYPE: Record<ActivityTag, 'warning' | 'info' | 'default' | 'success'> 
               <dd>{{ weekStats?.longest ?? '—' }}</dd>
             </div>
             <div>
-              <dt>Peak rate</dt>
+              <dt>Peak, one tick</dt>
               <dd>{{ weekStats?.peak ?? '—' }}</dd>
             </div>
             <div>

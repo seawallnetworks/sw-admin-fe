@@ -14,7 +14,8 @@ import {
   reasonLabel, severityLabel, severityType, type RangeKey,
 } from '../events'
 
-type Tab = keyof EventLists
+/** Every event list but attacks, which are the DDoS Protection page's (proposal 0017). */
+type Tab = Exclude<keyof EventLists, 'attacks'>
 const TABS: { key: Tab; label: string }[] = [
   { key: 'audit', label: 'Audit' },
   { key: 'blocks', label: 'Blocks' },

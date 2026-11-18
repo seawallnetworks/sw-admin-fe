@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  aclStatus, alertText, armedSince, attacks, auditActivity, countNetworks, ddosStatus, dropRate, fmtDuration,
-  latestMbps, minutesPerDay, peakPps, recentActivity, sortAlerts,
+  aclStatus, alertText, armedSince, attackPeak, attackSpans, auditActivity, countNetworks, ddosStatus, dropRate,
+  fmtDuration, lastAttackEnd, latestMbps, longestAttack, minutesPerDay, peakPps, recentActivity, sortAlerts,
 } from './overview'
-import type { AclEngine, Alert, AuditRecord, ChangeRecord, Trends } from './types'
+import type { AclEngine, Alert, AttackRecord, AuditRecord, ChangeRecord, OpenAttack, Trends } from './types'
 
 let nextId = 1
 const change = (time: number, op: string, c: Partial<ChangeRecord> = {}): ChangeRecord => ({
@@ -11,6 +11,12 @@ const change = (time: number, op: string, c: Partial<ChangeRecord> = {}): Change
   cause: null, generation: null, out_of_band: false, ...c,
 })
 const restart = (time: number) => change(time, 'gap', { cause: 'restart' })
+const attack = (start: number, end: number | null, how: string | null, peak: number | null = 1000): AttackRecord => ({
+  id: nextId++, epoch: 'e', attack: nextId, start, end, how, start_pps: 500, start_bps: null,
+  tick_peak_pps: peak, tick_peak_bps: null, dropped: null, cut: null, bans: null, started_after_gap: false,
+})
+const open: OpenAttack = { id: 1, since: 100, pps: 900, bps: null, tick_peak_pps: 1200, tick_peak_bps: null,
+  started_after_gap: false }
 const alert = (condition: string, severity: Alert['severity'] = 'warning', raised = 0): Alert => ({
   id: nextId++, condition, severity, message: `${condition} message`, raised,
 })
@@ -41,8 +47,7 @@ describe('DDoS protection', () => {
   it('a restart ends an open attack', () => {
     const changes = [change(100, 'arm'), restart(300)]
     expect(armedSince(changes)).toBeNull()
-    expect(ddosStatus([], changes, 500).state).toBe('watching')
-    expect(attacks(changes, 0, 1000)).toEqual([{ start: 100, end: 300, ongoing: false }])
+    expect(ddosStatus([], changes, null).state).toBe('watching')
     // a restart that isn't the gate's, or a gap of falling behind, doesn't
     expect(armedSince([change(100, 'arm'), change(300, 'gap', { cause: 'behind' })])).toBe(100)
     expect(armedSince([change(100, 'arm'), change(300, 'gap', { cause: 'restart', source: 'mfwd' })])).toBe(100)
@@ -50,32 +55,37 @@ describe('DDoS protection', () => {
 
   it('derives the state', () => {
     const armed = [change(100, 'arm')]
-    expect(ddosStatus([alert('voidgate_unreachable')], armed, 10).label).toBe('Not running')
-    expect(ddosStatus([], armed, 10)).toMatchObject({ state: 'attack', tone: 'warning' })
-    expect(ddosStatus([], armed, 0).label).toBe('Armed')
+    expect(ddosStatus([alert('voidgate_unreachable')], armed, open).label).toBe('Not running')
+    // voidgate's open attack, not drops: an arm by a manual block is no attack
+    expect(ddosStatus([], armed, open)).toMatchObject({ state: 'attack', tone: 'warning' })
+    expect(ddosStatus([], [], open).state).toBe('attack')
     expect(ddosStatus([], armed, null).label).toBe('Armed')
-    expect(ddosStatus([], [], 0)).toMatchObject({ label: 'Watching', tone: 'success' })
-    expect(ddosStatus([alert('voidgate_degraded')], [], 0)).toMatchObject({ label: 'Watching, degraded', tone: 'warning' })
-    expect(ddosStatus([alert('voidgate_no_flow_table')], armed, 5).label).toBe('Under attack, degraded')
+    expect(ddosStatus([], [], null)).toMatchObject({ label: 'Watching', tone: 'success' })
+    expect(ddosStatus([alert('voidgate_degraded')], [], null)).toMatchObject({ label: 'Watching, degraded', tone: 'warning' })
+    expect(ddosStatus([alert('voidgate_no_flow_table')], armed, open).label).toBe('Under attack, degraded')
   })
 
-  it('finds the attacks in a range', () => {
-    const list = attacks(
-      [
-        change(150, 'disarm'), // armed before the range
-        change(200, 'arm'), change(250, 'arm'), change(400, 'disarm'),
-        change(800, 'arm'),
-      ],
-      100,
+  it('takes the attacks from voidgate: open ones end now, a missed end is a lower bound', () => {
+    const list = attackSpans(
+      [attack(800, null, null), attack(200, 400, 'quiet'), attack(50, 150, 'restart')],
       1000,
     )
     expect(list).toEqual([
-      { start: 100, end: 150, ongoing: false },
-      { start: 200, end: 400, ongoing: false },
-      { start: 800, end: 1000, ongoing: true },
+      { start: 50, end: 150, ongoing: false, atLeast: true },
+      { start: 200, end: 400, ongoing: false, atLeast: false },
+      { start: 800, end: 1000, ongoing: true, atLeast: false },
     ])
-    // a restart first says nothing of before the range
-    expect(attacks([restart(150)], 100, 1000)).toEqual([])
+    expect(longestAttack(list)).toEqual({ secs: 200, atLeast: false })
+    expect(longestAttack([{ start: 0, end: 900, ongoing: false, atLeast: true }])).toEqual({ secs: 900, atLeast: true })
+    expect(longestAttack([])).toBeNull()
+  })
+
+  it('takes the peak of one tick, and when the last one ended', () => {
+    const list = [attack(100, 200, 'quiet', 5000), attack(300, null, null, 7000), attack(400, 500, 'gap', null)]
+    expect(attackPeak(list)).toBe(7000)
+    expect(attackPeak([])).toBeNull()
+    expect(lastAttackEnd(list)).toBe(500)
+    expect(lastAttackEnd([attack(300, null, null)])).toBeNull()
   })
 
   it('counts minutes under attack per local day', () => {
@@ -84,8 +94,8 @@ describe('DDoS protection', () => {
     // 30 min over yesterday's midnight, and 10 min now
     const bars = minutesPerDay(
       [
-        { start: midnight - 1200, end: midnight + 600, ongoing: false },
-        { start: now - 600, end: now, ongoing: true },
+        { start: midnight - 1200, end: midnight + 600, ongoing: false, atLeast: false },
+        { start: now - 600, end: now, ongoing: true, atLeast: false },
       ],
       now,
     )

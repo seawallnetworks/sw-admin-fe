@@ -4,7 +4,8 @@
 import { getToken } from './auth'
 import { ApiError } from './types'
 import type {
-  AclEngine, AclEngineState, AclEntry, Alert, AuditRecord, BlockRecord, ChangeRecord, ConfigPending, DashboardData,
+  AclEngine, AclEngineState, AclEntry, Alert, AttackRecord, AuditRecord, BlockRecord, ChangeRecord, ConfigPending,
+  DashboardData,
   DeviceConfig, EventPage, RequestOptions, Trends,
 } from './types'
 
@@ -180,6 +181,28 @@ function mockChanges(): ChangeRecord[] {
   return newestFirst(rows, (r) => r.time)
 }
 
+/**
+ * voidgate's attacks (proposal 0017), on the days the changes armed the gate on the wake threshold: one
+ * ended quiet, one whose end a restart hid (a lower bound), one disarmed; and the scenario's open one.
+ */
+function mockAttacks(): AttackRecord[] {
+  const a = { epoch: '9f2c41d07a6be3e1', start_bps: 1_200_000_000, tick_peak_bps: 1_900_000_000,
+    started_after_gap: false }
+  const rows: AttackRecord[] = [
+    { ...a, id: 1, attack: 3, start: loadedAt - 5 * D, end: loadedAt - 5 * D + 21 * 60, how: 'quiet',
+      start_pps: 410_000, tick_peak_pps: 2_650_000, dropped: 310_000_000, cut: 64, bans: 0 },
+    { ...a, id: 2, attack: 1, start: loadedAt - 3 * D, end: loadedAt - 3 * D + 95 * 60, how: 'restart',
+      start_pps: 380_000, tick_peak_pps: 2_480_000, dropped: null, cut: null, bans: null },
+    { ...a, id: 3, attack: 2, start: loadedAt - 26 * H, end: loadedAt - 26 * H + 38 * 60, how: 'disarm',
+      start_pps: 520_000, tick_peak_pps: 2_910_000, dropped: 655_000_000, cut: 212, bans: 37 },
+  ]
+  if (mock.scenario === 'attack') {
+    rows.push({ ...a, id: 4, attack: 3, start: loadedAt - ATTACK_AGO, end: null, how: null,
+      start_pps: 900_000, tick_peak_pps: 1_180_000, dropped: null, cut: null, bans: null })
+  }
+  return newestFirst(rows, (r) => r.id)
+}
+
 function mockAlerts(): Alert[] {
   const alerts: Alert[] = [
     { id: 2, condition: 'voidgate_unreachable', severity: 'warning', raised: loadedAt - 400,
@@ -323,24 +346,32 @@ const mockRoutes: [string, RegExp, MockHandler][] = [
         network, reason, started, ended, more,
       })),
       alerts: mockAlerts().filter((a) => !a.cleared),
+      attack: (() => {
+        const open = mockAttacks().find((x) => x.end === null)
+        if (!open) return null
+        const { inbound } = inboundAt(now)
+        return { id: open.attack, since: open.start, pps: inbound, bps: inbound === null ? null : inbound * 5440,
+          tick_peak_pps: open.tick_peak_pps, tick_peak_bps: open.tick_peak_bps, started_after_gap: false }
+      })(),
     } satisfies DashboardData
   }],
   ['GET', /^\/alerts$/, () => ({ records: mockAlerts().filter((a) => !a.cleared) })],
-  ['GET', /^\/events\/(audit|blocks|changes|alerts)$/, (m, { query }) => {
+  ['GET', /^\/events\/(audit|blocks|changes|alerts|attacks)$/, (m, { query }) => {
     type Row = { id: number } & Record<string, unknown>
     const lists: Record<string, () => Row[]> = {
       audit: () => mockAudit() as unknown as Row[],
       blocks: () => mockBlocks() as unknown as Row[],
       changes: () => mockChanges() as unknown as Row[],
       alerts: () => mockAlerts() as unknown as Row[],
+      attacks: () => mockAttacks() as unknown as Row[],
     }
     if (query?.since === undefined) throw new ApiError(400, 'invalid', 'since: required, Unix seconds')
     // in the range: an event by its time; a block or an alert open at any time in it
     const since = Number(query.since)
     const until = Number(query.until ?? Date.now() / 1000)
     const inRange = (r: Row) => {
-      const start = Number(r.time ?? r.started ?? r.raised)
-      const end = (r.ended ?? r.cleared ?? (r.time === undefined ? null : r.time)) as number | null | undefined
+      const start = Number(r.time ?? r.started ?? r.raised ?? r.start)
+      const end = (r.ended ?? r.cleared ?? r.end ?? (r.time === undefined ? null : r.time)) as number | null | undefined
       return start <= until && (end === null || end === undefined || end >= since)
     }
     let records = lists[m[1]]().filter(inRange)

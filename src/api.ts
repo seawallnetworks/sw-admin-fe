@@ -5,7 +5,7 @@ import { clearSession, getRole, getSession, getToken, setSession, type Session }
 import { ApiError } from './types'
 import { naiveTheme } from './theme'
 import type {
-  AclEngine, Alert, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, ConfigPending, DashboardData, DeviceConfig,
+  AclEngine, Alert, AttackRecord, AuditRecord, BlockRecord, ChangeReply, ChangeRecord, ConfigPending, DashboardData, DeviceConfig,
   EventPage, RequestOptions, Role, Trends,
 } from './types'
 
@@ -370,6 +370,7 @@ export interface EventLists {
   blocks: BlockRecord
   changes: ChangeRecord
   alerts: Alert
+  attacks: AttackRecord
 }
 
 /** The query of an event list: `since` required, Unix seconds; `before` a page's `next`. */

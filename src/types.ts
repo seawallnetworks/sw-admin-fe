@@ -177,6 +177,52 @@ export interface ChangeRecord {
   /** mfwd's policy generation, for an apply. */
   generation: number | null
   out_of_band: boolean
+  /** On voidgate's 'gap': attacks that started and ended inside it, nothing of them left. */
+  attacks_missed?: number | null
+}
+
+/**
+ * One of voidgate's attacks (proposal 0017): from traffic, less the host's own replies, over the wake
+ * thresholds, to quiet or a disarm. Rates are that traffic's.
+ */
+export interface AttackRecord {
+  id: number
+  /** voidgate's start, and its number for the attack, from 1 after each start. */
+  epoch: string
+  attack: number
+  start: number
+  /** null: still open. */
+  end: number | null
+  /**
+   * 'quiet' (`end` is when traffic fell), 'disarm' (`end` is then); 'gap' or 'restart': its end was missed,
+   * so `end` and the peaks are lower bounds, shown as "at least".
+   */
+  how: string | null
+  start_pps: number | null
+  start_bps: number | null
+  /** The highest single tick's (1 s by default), not a 10-second rate. */
+  tick_peak_pps: number | null
+  tick_peak_bps: number | null
+  /** Every packet dropped while it was open, a permanent block's too; null when its end was missed. */
+  dropped: number | null
+  /** Policy and aggregate blocks added while open. */
+  cut: number | null
+  /** The ban socket's blocks added while open. */
+  bans: number | null
+  /** It started while nothing was reading: `start` is voidgate's. */
+  started_after_gap: boolean
+}
+
+/** The attack open now, as GET /dashboard gives it. */
+export interface OpenAttack {
+  id: number
+  since: number
+  /** At the last poll of voidgate; null when that is too old. */
+  pps: number | null
+  bps: number | null
+  tick_peak_pps: number | null
+  tick_peak_bps: number | null
+  started_after_gap: boolean
 }
 
 /** A page of an event list, newest first; pass `next` as `before` for the one after, null at the end. */
@@ -209,6 +255,8 @@ export interface DashboardData {
   blocks: Pick<BlockRecord, 'network' | 'reason' | 'started' | 'ended' | 'more'>[]
   /** The open alerts, most severe first. */
   alerts: Alert[]
+  /** The attack open now, or null. */
+  attack: OpenAttack | null
 }
 
 export type Role = 'admin' | 'user'
