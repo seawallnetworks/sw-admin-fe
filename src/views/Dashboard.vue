@@ -9,11 +9,13 @@ import { NCard, NEmpty, NGi, NGrid, NTag } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { ComposeOption } from 'echarts/core'
 import type { LineSeriesOption } from 'echarts/charts'
-import type { GridComponentOption, MarkLineComponentOption, TooltipComponentOption } from 'echarts/components'
+import type {
+  GridComponentOption, LegendComponentOption, MarkLineComponentOption, TooltipComponentOption,
+} from 'echarts/components'
 import ModuleCard from '../components/ModuleCard.vue'
 import {
   fetchAllEvents, fetchDashboard, fetchEvents, fetchOpenAlerts, fetchTrends, getAclEngine, getConfig, getRole,
@@ -30,7 +32,7 @@ import {
 import { isDark } from '../theme'
 import { usePoller } from '../usePoller'
 
-use([LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+use([LineChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
 
 /** sw_logd's trends come every 10 seconds (Seawall proposal 0012 §4): polling faster shows nothing new. */
 const POLL_MS = 10_000
@@ -208,18 +210,21 @@ const armsInWindow = computed(() => {
 })
 
 const trafficOption = computed<
-  ComposeOption<LineSeriesOption | GridComponentOption | TooltipComponentOption | MarkLineComponentOption>
+  ComposeOption<
+    LineSeriesOption | GridComponentOption | LegendComponentOption | TooltipComponentOption | MarkLineComponentOption
+  >
 >(() => {
   const t = dash.value?.traffic ?? []
   const muted = themeColor('--c-muted')
   return {
     backgroundColor: 'transparent',
-    color: [themeColor('--c-info')],
+    color: [themeColor('--c-info'), themeColor('--c-error')],
+    legend: { data: ['Inbound', 'Dropped'], top: 0, textStyle: { color: muted } },
     tooltip: {
       trigger: 'axis',
       valueFormatter: (v) => fmtRate(typeof v === 'number' ? v : null),
     },
-    grid: { left: 64, right: 20, top: 16, bottom: 30 },
+    grid: { left: 64, right: 20, top: 36, bottom: 30 },
     xAxis: { type: 'time', splitLine: { show: false } },
     yAxis: {
       type: 'value',
@@ -242,6 +247,13 @@ const trafficOption = computed<
           label: { formatter: 'Armed', color: muted, position: 'insideEndTop' },
           data: armsInWindow.value.map((s) => ({ xAxis: s * 1000 })),
         },
+      },
+      {
+        name: 'Dropped',
+        type: 'line',
+        showSymbol: false,
+        connectNulls: false,
+        data: t.map((p) => [p.time * 1000, p.dropped_pps]),
       },
     ],
   }
