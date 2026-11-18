@@ -33,7 +33,24 @@ const menuOptions: MenuOption[] = menuItems.map(([path, label, icon]) => ({
   icon: () => h(NIcon, null, { default: () => h(icon) }),
 }))
 
-const collapsed = ref(false)
+// Folded or not, remembered per browser so a reload keeps it.
+const COLLAPSED_KEY = 'sw_sider_collapsed'
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const collapsed = ref(readCollapsed())
+function setCollapsed(v: boolean) {
+  collapsed.value = v
+  try {
+    localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0')
+  } catch {
+    // private window or blocked storage: it lasts until the page is reloaded
+  }
+}
 const username = ref(getUsername())
 const isAdmin = ref(getRole() === 'admin')
 
@@ -83,8 +100,8 @@ function onUserSelect(key: string) {
             :width="200"
             :collapsed="collapsed"
             show-trigger
-            @collapse="collapsed = true"
-            @expand="collapsed = false"
+            @collapse="setCollapsed(true)"
+            @expand="setCollapsed(false)"
           >
             <div class="brand">
               <NIcon :size="24" color="#18a058"><BrandIcon /></NIcon>
