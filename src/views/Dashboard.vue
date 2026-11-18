@@ -161,8 +161,11 @@ const ddosStats = computed(() => {
   const a = dash.value?.attack
   // a single tick's peak, voidgate's: higher than the chart's 10-second rates
   if (ddos.value.state === 'attack' && a) return [blocked, { label: 'Peak, one tick', value: fmtRate(a.tick_peak_pps) }]
-  const end = latestAttacks.value ? lastAttackEnd(latestAttacks.value) : null
-  const last = latestAttacks.value === null ? '—' : end === null ? 'None in 7 days' : fmtAgo(end, now.value)
+  const list = latestAttacks.value
+  const end = list ? lastAttackEnd(list) : null
+  // open, though the dashboard didn't say so (its call failed): it is now
+  const last =
+    list === null ? '—' : list.some((r) => r.end === null) ? 'Now' : end === null ? 'None in 7 days' : fmtAgo(end, now.value)
   return [blocked, { label: 'Last attack', value: last }]
 })
 
