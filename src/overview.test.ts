@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   aclStatus, alertText, armedSince, attackPeak, attackSpans, auditActivity, countNetworks, ddosStatus, dropRate,
-  fmtDuration, lastAttackEnd, latestMbps, longestAttack, minutesPerDay, peakPps, recentActivity, sortAlerts,
+  fmtDuration, lastAttackEnd, latestMbps, longestAttack, peakPps, recentActivity, sortAlerts,
 } from './overview'
 import type { AclEngine, Alert, AttackRecord, AuditRecord, ChangeRecord, OpenAttack, Trends } from './types'
 
@@ -86,23 +86,6 @@ describe('DDoS protection', () => {
     expect(attackPeak([])).toBeNull()
     expect(lastAttackEnd(list)).toBe(500)
     expect(lastAttackEnd([attack(300, null, null)])).toBeNull()
-  })
-
-  it('counts minutes under attack per local day', () => {
-    const midnight = new Date(2026, 10, 16).getTime() / 1000
-    const now = midnight + 12 * 3600
-    // 30 min over yesterday's midnight, and 10 min now
-    const bars = minutesPerDay(
-      [
-        { start: midnight - 1200, end: midnight + 600, ongoing: false, atLeast: false },
-        { start: now - 600, end: now, ongoing: true, atLeast: false },
-      ],
-      now,
-    )
-    expect(bars).toHaveLength(7)
-    expect(bars[6]).toMatchObject({ label: 'Today', minutes: 20 })
-    expect(bars[5].minutes).toBe(20)
-    expect(bars[0].minutes).toBe(0)
   })
 })
 

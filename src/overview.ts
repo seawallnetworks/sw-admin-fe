@@ -173,29 +173,6 @@ export function lastAttackEnd(records: AttackRecord[]): number | null {
   return records.reduce<number | null>((t, r) => (r.end !== null && (t === null || r.end > t) ? r.end : t), null)
 }
 
-export interface DayBar {
-  /** Local midnight, epoch ms. */
-  day: number
-  label: string
-  minutes: number
-}
-
-/** Minutes under attack on each of the last `days` days, today last, in the browser's time zone. */
-export function minutesPerDay(list: Attack[], now: number, days = 7): DayBar[] {
-  const today = new Date(now * 1000)
-  const out: DayBar[] = []
-  for (let i = days - 1; i >= 0; i--) {
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i).getTime()
-    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i + 1).getTime()
-    let ms = 0
-    for (const a of list) ms += Math.max(0, Math.min(end, a.end * 1000) - Math.max(start, a.start * 1000))
-    const d = new Date(start)
-    const label = i === 0 ? 'Today' : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}`
-    out.push({ day: start, label, minutes: Math.round(ms / 60000) })
-  }
-  return out
-}
-
 // ---------- blocks ----------
 
 /** How many networks the records stand for: a summary row is `more` of them. */

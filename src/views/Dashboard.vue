@@ -8,11 +8,11 @@ import { RouterLink } from 'vue-router'
 import { NCard, NEmpty, NGi, NGrid, NTag } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
-import { BarChart, LineChart } from 'echarts/charts'
+import { LineChart } from 'echarts/charts'
 import { GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { ComposeOption } from 'echarts/core'
-import type { BarSeriesOption, LineSeriesOption } from 'echarts/charts'
+import type { LineSeriesOption } from 'echarts/charts'
 import type { GridComponentOption, MarkLineComponentOption, TooltipComponentOption } from 'echarts/components'
 import ModuleCard from '../components/ModuleCard.vue'
 import {
@@ -24,13 +24,13 @@ import { STATUS_LABEL } from '../aclPage'
 import { fmtDateTime, fmtTime, severityLabel, severityType } from '../events'
 import {
   aclStatus, alertText, attackPeak, attackSpans, countNetworks, ddosStatus, dropRate, fmtAgo, fmtDuration,
-  fmtMbps, fmtRate, lastAttackEnd, latestMbps, longestAttack, minutesPerDay, recentActivity, sortAlerts,
+  fmtMbps, fmtRate, lastAttackEnd, latestMbps, longestAttack, recentActivity, sortAlerts,
   type Activity, type ActivityTag,
 } from '../overview'
 import { isDark } from '../theme'
 import { usePoller } from '../usePoller'
 
-use([BarChart, LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+use([LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
 
 /** sw_logd's trends come every 10 seconds (Seawall proposal 0012 §4): polling faster shows nothing new. */
 const POLL_MS = 10_000
@@ -185,11 +185,11 @@ const aclStats = computed(() => {
   ]
 })
 
-/** Bans from the web gateway: timed blocks started in the last 24 hours. */
+/** Bans from the web gateway: blocks a ban client asked for in the last 24 hours. A timed block can also be a command's. */
 const bans24h = computed(() => {
   const w = week.value
   if (!w?.blocks) return '—'
-  return countNetworks(w.blocks.filter((b) => b.reason === 'timed' && b.started >= w.now - DAY)).toLocaleString('en-US')
+  return countNetworks(w.blocks.filter((b) => b.origin === 'ban' && b.started >= w.now - DAY)).toLocaleString('en-US')
 })
 
 // ---------- 3. traffic ----------
@@ -271,27 +271,21 @@ const weekStats = computed(() => {
     longest: longest ? `${longest.atLeast ? 'At least ' : ''}${fmtDuration(longest.secs)}` : '—',
     peak: fmtRate(attackPeak(w.attacks)),
     cut: started ? countNetworks(started) : null,
-    byHand: started ? countNetworks(started.filter((b) => b.reason === 'manual')) : null,
-    bars: minutesPerDay(list, w.now),
+    // by who asked, not the reason: a command can make a timed block too
+    byHand: started ? countNetworks(started.filter((b) => b.origin === 'socket')) : null,
+    banned: started ? countNetworks(started.filter((b) => b.origin === 'ban')) : null,
+    byGate: started ? countNetworks(started.filter((b) => b.origin === 'self')) : null,
   }
 })
 
-const barOption = computed<ComposeOption<BarSeriesOption | GridComponentOption | TooltipComponentOption>>(() => {
-  const bars = weekStats.value?.bars ?? []
-  return {
-    backgroundColor: 'transparent',
-    color: [themeColor('--c-warning')],
-    tooltip: { trigger: 'axis', valueFormatter: (v) => `${v} min under attack` },
-    grid: { left: 40, right: 8, top: 12, bottom: 24 },
-    xAxis: { type: 'category', data: bars.map((b) => b.label), axisTick: { show: false } },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      axisLabel: { formatter: '{value} min' },
-      splitLine: { lineStyle: { color: themeColor('--c-border') } },
-    },
-    series: [{ name: 'Under attack', type: 'bar', barMaxWidth: 28, data: bars.map((b) => b.minutes) }],
-  }
+/** Who asked for the week's blocks, e.g. "3 by hand, 1 banned, 3 by the DDoS gate"; an unknown origin isn't named. */
+const cutParts = computed(() => {
+  const w = weekStats.value
+  const parts: string[] = []
+  if (w?.byHand) parts.push(`${w.byHand.toLocaleString('en-US')} by hand`)
+  if (w?.banned) parts.push(`${w.banned.toLocaleString('en-US')} banned`)
+  if (w?.byGate) parts.push(`${w.byGate.toLocaleString('en-US')} by the DDoS gate`)
+  return parts.join(', ')
 })
 
 // ---------- 5. activity and this device ----------
@@ -382,33 +376,27 @@ const TAG_TYPE: Record<ActivityTag, 'warning' | 'info' | 'default' | 'success'> 
     <!-- 4. the last 7 days -->
     <NGi span="3">
       <NCard title="Last 7 days">
-        <div class="week">
-          <dl class="week-stats">
-            <div>
-              <dt>Attacks</dt>
-              <dd>{{ weekStats ? weekStats.count : '—' }}</dd>
-            </div>
-            <div>
-              <dt>Longest</dt>
-              <dd>{{ weekStats?.longest ?? '—' }}</dd>
-            </div>
-            <div>
-              <dt>Peak, one tick</dt>
-              <dd>{{ weekStats?.peak ?? '—' }}</dd>
-            </div>
-            <div>
-              <dt>Networks cut</dt>
-              <dd>
-                {{ weekStats?.cut?.toLocaleString('en-US') ?? '—' }}
-                <span v-if="weekStats?.byHand" class="muted small">{{ weekStats.byHand.toLocaleString('en-US') }} by hand</span>
-              </dd>
-            </div>
-          </dl>
-          <div class="week-chart">
-            <div class="muted small">Minutes under attack per day</div>
-            <VChart :option="barOption" :theme="isDark ? 'dark' : undefined" autoresize style="height: 150px" />
+        <dl class="week-stats">
+          <div>
+            <dt>Attacks</dt>
+            <dd>{{ weekStats ? weekStats.count : '—' }}</dd>
           </div>
-        </div>
+          <div>
+            <dt>Longest</dt>
+            <dd>{{ weekStats?.longest ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Peak, one tick</dt>
+            <dd>{{ weekStats?.peak ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>Blocks</dt>
+            <dd>
+              {{ weekStats?.cut?.toLocaleString('en-US') ?? '—' }}
+              <span v-if="cutParts" class="muted small">{{ cutParts }}</span>
+            </dd>
+          </div>
+        </dl>
       </NCard>
     </NGi>
   </NGrid>
@@ -497,17 +485,16 @@ const TAG_TYPE: Record<ActivityTag, 'warning' | 'info' | 'default' | 'success'> 
   font-weight: normal;
   font-variant-numeric: tabular-nums;
 }
-.week {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 32px;
-  align-items: center;
-}
 .week-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(120px, auto));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px 32px;
   margin: 0;
+}
+@media (max-width: 640px) {
+  .week-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .week-stats dt,
 .device dt {
@@ -523,10 +510,6 @@ const TAG_TYPE: Record<ActivityTag, 'warning' | 'info' | 'default' | 'success'> 
 .week-stats dd .small {
   font-weight: normal;
   margin-left: 4px;
-}
-.week-chart {
-  flex: 1;
-  min-width: 260px;
 }
 .bottom {
   margin-top: 16px;
